@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:toastification/toastification.dart';
 import 'package:rider/core/constants/themes.dart';
 import 'package:rider/services/navigation_service.dart';
@@ -20,7 +21,7 @@ void main() {
   // Lancer l'application avec ProviderScope pour Riverpod
   runApp(
     const ProviderScope(
-      child: MyApp(initialRoute: Routes.home),
+      child: MyApp(initialRoute: Routes.splash),
     ),
   );
 }
@@ -34,20 +35,28 @@ class MyApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
 
-    return ToastificationWrapper(
-      child: MaterialApp(
-        // Utiliser la même clé de navigation globale pour toute l'application
-        navigatorKey: Routes.navigatorKey,
-        title: 'ZEET Rider',
-        // Configuration des thèmes
-        theme: AppTheme.lightTheme(context),
-        darkTheme: AppTheme.darkTheme(context),
-        themeMode: themeMode,
-        // Configuration des routes
-        initialRoute: initialRoute,
-        onGenerateRoute: Routes.onGenerateRoute,
-        debugShowCheckedModeBanner: false,
-      ),
+    return ScreenUtilInit(
+      // Design size basé sur iPhone 11 Pro (375x812)
+      designSize: const Size(375, 812),
+      minTextAdapt: true,
+      splitScreenMode: true,
+      builder: (context, child) {
+        return ToastificationWrapper(
+          child: MaterialApp(
+            // Utiliser la même clé de navigation globale pour toute l'application
+            navigatorKey: Routes.navigatorKey,
+            title: 'ZEET Rider',
+            // Configuration des thèmes
+            theme: AppTheme.lightTheme(context),
+            darkTheme: AppTheme.darkTheme(context),
+            themeMode: themeMode,
+            // Configuration des routes
+            initialRoute: initialRoute,
+            onGenerateRoute: Routes.onGenerateRoute,
+            debugShowCheckedModeBanner: false,
+          ),
+        );
+      },
     );
   }
 }

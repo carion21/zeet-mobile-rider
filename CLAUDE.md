@@ -48,7 +48,10 @@ Custom navigation service (`lib/services/navigation_service.dart`) with:
   - `Routes.navigateAndRemoveAll(routeName)` - Clear stack with named route
   - `Routes.goBack([result])` - Pop with optional result
 
-Named routes available: `home`
+Named routes available: `home`, `login`
+
+Special navigation methods:
+  - `Routes.pushVerifyOtp(phoneNumber, type, [fullName])` - Navigate to OTP verification with parameters
 
 ### Project Structure
 
@@ -65,7 +68,10 @@ Named routes available: `home`
   - Each screen is typically an `index.dart` file
   - May include separate `controllers.dart` for business logic
   - May include a `widgets/` subfolder for screen-specific widgets
-  - Examples: delivery list, active delivery, navigation, history, profile, settings
+  - **Implemented screens:**
+    - `auth/login/` - Login screen with phone number authentication
+    - `auth/verify_otp/` - OTP verification screen (5-digit code)
+  - **Future screens:** delivery list, active delivery, navigation, history, profile, settings
 
 - **`lib/providers/`** - Riverpod state notifiers and providers
   - Each provider file defines StateNotifierProvider and related computed providers
@@ -83,23 +89,83 @@ Named routes available: `home`
 
 Material 3 theme system with:
 - Light and dark themes defined in `lib/core/constants/themes.dart`
-- Google Fonts: Poppins for headings, Inter for body text
+- Google Fonts: **Roboto** (police officielle Material Design) pour toute l'application
 - Theme follows system preference by default (persisted via SharedPreferences)
 - Custom color scheme in `lib/core/constants/colors.dart`
 - To check dark mode: `Theme.of(context).brightness == Brightness.dark`
 
 ### Responsive Sizing
 
-`AppSizes()` singleton provides responsive dimensions:
-- Must call `AppSizes().initialize(context)` before use (done in theme initialization)
-- Methods:
-  - `percentWidth(percent)` / `percentHeight(percent)` - Safe area percentages
-  - `fullPercentWidth(percent)` / `fullPercentHeight(percent)` - Full screen percentages
-  - `scaledFontSize(size)` - Font size scaled to screen width (375px baseline)
-- Predefined sizes:
-  - Font sizes: `h1`, `h2`, `h3`, `bodyLarge`, `bodyMedium`, `bodySmall`
-  - Paddings: `paddingSmall`, `paddingMedium`, `paddingLarge`, `paddingXLarge`
-  - Radii: `radiusSmall`, `radiusMedium`
+**IMPORTANT: L'application utilise maintenant `flutter_screenutil` pour l'adaptation responsive.**
+
+#### Configuration ScreenUtil
+- Design size: **375x812** (basé sur iPhone 11 Pro)
+- Configuré dans `main.dart` avec `ScreenUtilInit`
+- Helper class disponible: `lib/core/utils/screen_util_helper.dart`
+
+#### Utilisation de ScreenUtil
+
+**1. Adaptation de taille:**
+```dart
+// Largeur adaptative
+width: 100.w  // 100 unités logiques de largeur
+
+// Hauteur adaptative
+height: 50.h  // 50 unités logiques de hauteur
+
+// Rayon adaptatif
+borderRadius: BorderRadius.circular(12.r)
+```
+
+**2. Adaptation de police:**
+```dart
+fontSize: 16.sp  // Taille de police adaptative
+```
+
+**3. Tailles d'écran:**
+```dart
+1.sw      // 100% de la largeur de l'écran
+1.sh      // 100% de la hauteur de l'écran
+0.5.sw    // 50% de la largeur de l'écran
+0.3.sh    // 30% de la hauteur de l'écran
+```
+
+**4. EdgeInsets adaptatifs:**
+```dart
+EdgeInsets.all(16.w)
+EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h)
+EdgeInsets.only(left: 8.w, top: 12.h, right: 8.w, bottom: 16.h)
+```
+
+**5. SizedBox adaptatif:**
+```dart
+SizedBox(width: 10.w, height: 10.h)
+10.horizontalSpace  // Équivalent à SizedBox(width: 10.w)
+10.verticalSpace    // Équivalent à SizedBox(height: 10.h)
+```
+
+**6. Helper constants (ScreenUtilHelper):**
+```dart
+import 'package:rider/core/utils/screen_util_helper.dart';
+
+// Tailles de police
+ScreenUtilHelper.h1FontSize         // 24.sp
+ScreenUtilHelper.bodyMediumFontSize // 14.sp
+
+// Paddings
+ScreenUtilHelper.paddingSmall   // 8.w
+ScreenUtilHelper.paddingMedium  // 16.w
+ScreenUtilHelper.paddingLarge   // 24.w
+
+// Radius
+ScreenUtilHelper.radiusSmall   // 8.r
+ScreenUtilHelper.radiusMedium  // 12.r
+
+// Tailles d'icône
+ScreenUtilHelper.iconSizeMedium  // 24.sp
+```
+
+**Note:** L'ancien système `AppSizes()` reste disponible mais **préférez ScreenUtil** pour les nouveaux développements.
 
 ### Screen Structure Pattern
 
@@ -119,11 +185,16 @@ Screens follow consistent patterns:
 
 ### Dependencies
 - `flutter_riverpod` - State management
+- `flutter_screenutil` - Responsive UI adaptation (design size: 375x812)
 - `google_fonts` - Typography
 - `shared_preferences` - Local storage for theme and settings
 - `battery_plus` - Battery status
 - `intl` - Internationalization and formatting
 - `toastification` - Toast notifications (replaces SnackBars)
+- `syncfusion_flutter_charts` - Charts and data visualization
+- `iconsax_flutter` - Modern icon set
+- `flutter_map` - Interactive maps
+- `geolocator` - Location services
 - SDK: Dart ^3.7.0
 
 ### Assets
@@ -323,12 +394,37 @@ class DeliveryNotifier extends StateNotifier<List<Delivery>> {
 }
 ```
 
-## Next Steps
+## Current Implementation Status
 
-This is a base setup for the Rider app. The following needs to be implemented:
+### ✅ Implemented Features
+
+#### Authentication System
+- **Login Screen** (`lib/screens/auth/login/`)
+  - Phone number authentication (Ivorian numbers: 01, 05, 07)
+  - Social authentication options (Google, Facebook)
+  - Input validation with real-time feedback
+  - Loading states and error handling
+  - Responsive design with dark mode support
+  - Controller: `LoginController` handles form logic and API calls
+
+- **OTP Verification Screen** (`lib/screens/auth/verify_otp/`)
+  - 5-digit OTP input fields
+  - Auto-focus between fields
+  - 60-second countdown timer
+  - Resend code functionality
+  - Masked phone number display (+225 *******XX)
+  - Controller: `VerifyOtpController` manages OTP logic and timer
+
+- **Navigation Flow**
+  - Login → OTP → Home (with proper stack management)
+  - Custom slide transitions (300ms)
+  - Initial route set to login screen
+
+### 🔨 Next Steps
+
+The following features need to be implemented:
 
 ### Core Features
-- **Authentication screens** (login, register, OTP verification)
 - **Delivery management** (active delivery, delivery list, delivery details)
 - **Navigation** (map integration, route guidance)
 - **Profile & Settings** (rider profile, preferences, account settings)

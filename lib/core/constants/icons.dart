@@ -13,6 +13,7 @@ class IconManager {
     'edit': Icons.edit,
     'notifications': Icons.notifications,
     'profile': Icons.person,
+    'person': Icons.person,
     'logout': Icons.logout,
     'email': Icons.email_outlined,
     'phone': Icons.phone_outlined,
@@ -91,6 +92,13 @@ class IconManager {
     'motorcycle': Icons.two_wheeler,
     'receipt': Icons.receipt_long,
     'filter_list': Icons.filter_list,
+    'sun': Icons.wb_sunny,
+    'moon': Icons.nightlight_round,
+    'sound': Icons.volume_up,
+    'vibration': Icons.vibration,
+    'language': Icons.language,
+    'document': Icons.description,
+    'privacy': Icons.privacy_tip,
   };
 
   // Icônes Cupertino pour iOS
@@ -103,6 +111,7 @@ class IconManager {
     'edit': CupertinoIcons.pencil,
     'notifications': CupertinoIcons.bell,
     'profile': CupertinoIcons.profile_circled,
+    'person': CupertinoIcons.person,
     'logout': CupertinoIcons.square_arrow_left,
     'email': CupertinoIcons.mail,
     'phone': CupertinoIcons.phone,
@@ -181,6 +190,13 @@ class IconManager {
     'motorcycle': CupertinoIcons.cube_box,
     'receipt': CupertinoIcons.list_bullet,
     'filter_list': CupertinoIcons.line_horizontal_3_decrease,
+    'sun': CupertinoIcons.sun_max,
+    'moon': CupertinoIcons.moon,
+    'sound': CupertinoIcons.speaker_2,
+    'vibration': CupertinoIcons.device_phone_portrait,
+    'language': CupertinoIcons.globe,
+    'document': CupertinoIcons.doc_text,
+    'privacy': CupertinoIcons.lock_shield,
   };
 
   static Icon getIcon(String iconName, {Color? color, double? size}) {

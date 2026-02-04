@@ -68,19 +68,27 @@ class AppSizes {
     return _blockHeight * percent;
   }
 
-  // Font sizes responsives
+  // Font sizes responsives - Optimisé selon Material Design 3 et best practices 2024
   double scaledFontSize(double size) {
     _ensureInitialized();
-    double scaleFactor = _screenWidth / 375.0; // iPhone 8 width ref
+    double scaleFactor = _screenWidth / 375.0; // iPhone 11 Pro width ref
     return size * scaleFactor;
   }
 
-  double get h1 => scaledFontSize(28.0);
-  double get h2 => scaledFontSize(24.0);
-  double get h3 => scaledFontSize(20.0);
-  double get bodyLarge => scaledFontSize(16.0);
-  double get bodyMedium => scaledFontSize(14.0);
-  double get bodySmall => scaledFontSize(12.0);
+  // Titres (Headers)
+  double get h1 => scaledFontSize(24.0);  // Titres principaux
+  double get h2 => scaledFontSize(20.0);  // Sous-titres
+  double get h3 => scaledFontSize(18.0);  // Titres tertiaires
+
+  // Corps de texte (Body)
+  double get bodyLarge => scaledFontSize(16.0);   // Texte important
+  double get bodyMedium => scaledFontSize(14.0);  // Texte standard (le plus utilisé)
+  double get bodySmall => scaledFontSize(12.0);   // Texte secondaire
+
+  // Labels et boutons
+  double get buttonText => scaledFontSize(15.0);  // Texte de boutons
+  double get label => scaledFontSize(13.0);       // Labels de champs
+  double get caption => scaledFontSize(11.0);     // Informations très secondaires
 
   // Line heights
   double get lineHeightLarge => 1.6;

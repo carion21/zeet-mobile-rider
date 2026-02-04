@@ -11,31 +11,57 @@ class AppTheme {
     // Initialisation des tailles responsives
     AppSizes().initialize(context);
 
-    final textTheme = GoogleFonts.poppinsTextTheme().copyWith(
-      displayLarge: GoogleFonts.poppins(
-        fontSize: AppSizes().h1,
+    // TextTheme avec Roboto - Police Material Design officielle
+    final textTheme = GoogleFonts.robotoTextTheme().copyWith(
+      // Titres principaux (Roboto Bold)
+      displayLarge: GoogleFonts.roboto(
+        fontSize: AppSizes().h1,        // 24sp
         fontWeight: FontWeight.bold,
         color: colorScheme.onSurface,
       ),
-      displayMedium: GoogleFonts.poppins(
-        fontSize: AppSizes().h2,
+      displayMedium: GoogleFonts.roboto(
+        fontSize: AppSizes().h2,        // 20sp
         fontWeight: FontWeight.bold,
         color: colorScheme.onSurface,
       ),
-      bodyLarge: GoogleFonts.inter(
-        fontSize: AppSizes().bodyLarge,
-        fontWeight: FontWeight.w400,
-        color: colorScheme.onSurface,
-      ),
-      bodyMedium: GoogleFonts.inter(
-        fontSize: AppSizes().bodyMedium,
-        fontWeight: FontWeight.w400,
-        color: colorScheme.onSurface,
-      ),
-      labelLarge: GoogleFonts.poppins(
-        fontSize: AppSizes().bodyMedium,
+      headlineSmall: GoogleFonts.roboto(
+        fontSize: AppSizes().h3,        // 18sp
         fontWeight: FontWeight.w600,
+        color: colorScheme.onSurface,
+      ),
+
+      // Corps de texte (Roboto Regular)
+      bodyLarge: GoogleFonts.roboto(
+        fontSize: AppSizes().bodyLarge,   // 16sp
+        fontWeight: FontWeight.w400,
+        color: colorScheme.onSurface,
+      ),
+      bodyMedium: GoogleFonts.roboto(
+        fontSize: AppSizes().bodyMedium,  // 14sp
+        fontWeight: FontWeight.w400,
+        color: colorScheme.onSurface,
+      ),
+      bodySmall: GoogleFonts.roboto(
+        fontSize: AppSizes().bodySmall,   // 12sp
+        fontWeight: FontWeight.w400,
+        color: colorScheme.onSurface,
+      ),
+
+      // Labels et boutons (Roboto Medium)
+      labelLarge: GoogleFonts.roboto(
+        fontSize: AppSizes().buttonText,  // 15sp
+        fontWeight: FontWeight.w500,
         color: colorScheme.primary,
+      ),
+      labelMedium: GoogleFonts.roboto(
+        fontSize: AppSizes().label,       // 13sp
+        fontWeight: FontWeight.w500,
+        color: colorScheme.onSurface,
+      ),
+      labelSmall: GoogleFonts.roboto(
+        fontSize: AppSizes().caption,     // 11sp
+        fontWeight: FontWeight.w400,
+        color: colorScheme.onSurfaceVariant,
       ),
     );
 
@@ -98,7 +124,7 @@ class AppTheme {
         foregroundColor: colorScheme.onSurface,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: GoogleFonts.poppins(
+        titleTextStyle: GoogleFonts.roboto(
           fontSize: AppSizes().h3,
           fontWeight: FontWeight.w600,
           color: colorScheme.onSurface,
@@ -112,7 +138,7 @@ class AppTheme {
 
       snackBarTheme: SnackBarThemeData(
         backgroundColor: colorScheme.error,
-        contentTextStyle: GoogleFonts.inter(
+        contentTextStyle: GoogleFonts.roboto(
           fontSize: AppSizes().bodyMedium,
           color: colorScheme.onError,
         ),
