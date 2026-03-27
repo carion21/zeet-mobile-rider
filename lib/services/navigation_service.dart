@@ -158,7 +158,31 @@ class Routes {
     );
   }
 
-  // Navigation spéciale pour l'écran de détails de livraison avec paramètres
+  // Navigation vers l'ecran de detail de mission (basee sur l'API)
+  static Future<T?> pushMissionDetails<T>({
+    required String missionId,
+  }) {
+    if (navigatorKey.currentState == null) return Future.value(null);
+
+    return navigatorKey.currentState!.push<T>(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => DeliveryDetailsScreen(
+          missionId: missionId,
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(1.0, 0.0);
+          const end = Offset.zero;
+          const curve = Curves.easeInOut;
+          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+          return SlideTransition(position: offsetAnimation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
+  }
+
+  // Navigation vers l'ecran de details de livraison (legacy mock -- sera supprime)
   static Future<T?> pushDeliveryDetails<T>({
     required Delivery delivery,
   }) {
@@ -166,9 +190,7 @@ class Routes {
 
     return navigatorKey.currentState!.push<T>(
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => DeliveryDetailsScreen(
-          delivery: delivery,
-        ),
+        pageBuilder: (context, animation, secondaryAnimation) => const DeliveryDetailsScreen(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = Offset(1.0, 0.0);
           const end = Offset.zero;

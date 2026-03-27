@@ -1,106 +1,33 @@
 // lib/screens/deliveries/index.dart
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/sizes.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:rider/services/navigation_service.dart';
-import 'package:rider/models/delivery_model.dart';
+import 'package:rider/providers/mission_provider.dart';
+import 'package:rider/models/mission_model.dart';
 
-class DeliveriesScreen extends StatefulWidget {
+class DeliveriesScreen extends ConsumerStatefulWidget {
   const DeliveriesScreen({super.key});
 
   @override
-  State<DeliveriesScreen> createState() => _DeliveriesScreenState();
+  ConsumerState<DeliveriesScreen> createState() => _DeliveriesScreenState();
 }
 
-class _DeliveriesScreenState extends State<DeliveriesScreen> with SingleTickerProviderStateMixin {
+class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
-
-  // Exemples de livraisons
-  final List<Delivery> _newDeliveries = [
-    Delivery(
-      id: 'DLV003',
-      customerName: 'Assemian Marie',
-      customerPhone: '+225 0101010103',
-      restaurantName: 'Asian Fusion',
-      pickupAddress: 'Cocody, Boulevard Latrille',
-      deliveryAddress: 'Cocody, II Plateaux Vallon',
-      status: 'new',
-      distance: 2.5,
-      estimatedTime: 20,
-      deliveryFee: 1200,
-      orderDetails: '1 article',
-      createdAt: DateTime.now().subtract(const Duration(minutes: 2)),
-    ),
-  ];
-
-  final List<Delivery> _ongoingDeliveries = [
-    Delivery(
-      id: 'DLV001',
-      customerName: 'Kouadio Aya',
-      customerPhone: '+225 0707070701',
-      restaurantName: 'Chez Maman',
-      pickupAddress: 'Cocody, Angré 7ème Tranche',
-      deliveryAddress: 'Cocody, Riviera Palmeraie',
-      status: 'accepted',
-      distance: 3.2,
-      estimatedTime: 25,
-      deliveryFee: 1500,
-      orderDetails: '2 articles',
-      createdAt: DateTime.now().subtract(const Duration(minutes: 5)),
-    ),
-    Delivery(
-      id: 'DLV002',
-      customerName: 'Yao Jean',
-      customerPhone: '+225 0505050502',
-      restaurantName: 'Le Bistro Gourmand',
-      pickupAddress: 'Plateau, Rue du Commerce',
-      deliveryAddress: 'Marcory, Zone 4',
-      status: 'picked_up',
-      distance: 5.8,
-      estimatedTime: 35,
-      deliveryFee: 2000,
-      orderDetails: '3 articles',
-      createdAt: DateTime.now().subtract(const Duration(minutes: 15)),
-    ),
-  ];
-
-  final List<Delivery> _completedDeliveries = [
-    Delivery(
-      id: 'DLV100',
-      customerName: 'Brou Sylvie',
-      customerPhone: '+225 0606060604',
-      restaurantName: 'La Terrasse Verte',
-      pickupAddress: 'Plateau, Avenue Chardy',
-      deliveryAddress: 'Yopougon, Sideci',
-      status: 'delivered',
-      distance: 8.5,
-      estimatedTime: 45,
-      deliveryFee: 2500,
-      orderDetails: '4 articles',
-      createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-    ),
-    Delivery(
-      id: 'DLV099',
-      customerName: 'Koné Ibrahim',
-      customerPhone: '+225 0404040405',
-      restaurantName: 'Pasta & Co',
-      pickupAddress: 'Cocody, Rue Lepic',
-      deliveryAddress: 'Adjamé, Marché',
-      status: 'delivered',
-      distance: 6.2,
-      estimatedTime: 40,
-      deliveryFee: 2200,
-      orderDetails: '2 articles',
-      createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-    ),
-  ];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    // Charger les missions
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(missionsListProvider.notifier).load();
+    });
   }
 
   @override
@@ -111,6 +38,7 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
+    final missionsState = ref.watch(missionsListProvider);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDarkMode ? AppColors.darkText : AppColors.text;
     final textLightColor = isDarkMode ? AppColors.darkTextLight : AppColors.textLight;
@@ -128,18 +56,38 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> with SingleTickerPr
             _buildHeader(textColor),
 
             // Tabs
-            _buildTabs(surfaceColor, textColor, textLightColor),
+            _buildTabs(surfaceColor, textColor, textLightColor, missionsState),
 
-            // Liste des livraisons
+            // Liste des missions
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildDeliveryList(_newDeliveries, textColor, textLightColor, surfaceColor, 'new'),
-                  _buildDeliveryList(_ongoingDeliveries, textColor, textLightColor, surfaceColor, 'ongoing'),
-                  _buildDeliveryList(_completedDeliveries, textColor, textLightColor, surfaceColor, 'completed'),
-                ],
-              ),
+              child: missionsState.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildMissionList(
+                          missionsState.available,
+                          textColor,
+                          textLightColor,
+                          surfaceColor,
+                          'new',
+                        ),
+                        _buildMissionList(
+                          missionsState.ongoing,
+                          textColor,
+                          textLightColor,
+                          surfaceColor,
+                          'ongoing',
+                        ),
+                        _buildMissionList(
+                          missionsState.completed,
+                          textColor,
+                          textLightColor,
+                          surfaceColor,
+                          'completed',
+                        ),
+                      ],
+                    ),
             ),
           ],
         ),
@@ -171,12 +119,23 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> with SingleTickerPr
               fontWeight: FontWeight.bold,
             ),
           ),
+          const Spacer(),
+          // Bouton de rafraichissement
+          IconButton(
+            icon: IconManager.getIcon('refresh', color: textColor, size: 22),
+            onPressed: () => ref.read(missionsListProvider.notifier).refresh(),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildTabs(Color surfaceColor, Color textColor, Color textLightColor) {
+  Widget _buildTabs(
+    Color surfaceColor,
+    Color textColor,
+    Color textLightColor,
+    MissionsListState missionsState,
+  ) {
     return Container(
       margin: EdgeInsets.symmetric(
         horizontal: AppSizes().paddingLarge,
@@ -212,7 +171,7 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> with SingleTickerPr
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Text('Nouvelles'),
-                if (_newDeliveries.isNotEmpty) ...[
+                if (missionsState.available.isNotEmpty) ...[
                   const SizedBox(width: 6),
                   Container(
                     padding: const EdgeInsets.all(4),
@@ -221,7 +180,34 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> with SingleTickerPr
                       shape: BoxShape.circle,
                     ),
                     child: Text(
-                      '${_newDeliveries.length}',
+                      '${missionsState.available.length}',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 10.sp,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Tab(
+            height: 40,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('En cours'),
+                if (missionsState.ongoing.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '${missionsState.ongoing.length}',
                       style: TextStyle(
                         color: AppColors.primary,
                         fontSize: 10.sp,
@@ -235,10 +221,6 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> with SingleTickerPr
           ),
           const Tab(
             height: 40,
-            text: 'En cours',
-          ),
-          const Tab(
-            height: 40,
             text: 'Terminées',
           ),
         ],
@@ -246,32 +228,41 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> with SingleTickerPr
     );
   }
 
-  Widget _buildDeliveryList(
-    List<Delivery> deliveries,
+  Widget _buildMissionList(
+    List<Mission> missions,
     Color textColor,
     Color textLightColor,
     Color surfaceColor,
     String type,
   ) {
-    if (deliveries.isEmpty) {
+    if (missions.isEmpty) {
       return _buildEmptyState(type, textColor, textLightColor, surfaceColor);
     }
 
-    return ListView.builder(
-      padding: EdgeInsets.all(AppSizes().paddingLarge),
-      itemCount: deliveries.length,
-      itemBuilder: (context, index) {
-        return _buildDeliveryCard(
-          deliveries[index],
-          textColor,
-          textLightColor,
-          surfaceColor,
-        );
-      },
+    return RefreshIndicator(
+      onRefresh: () => ref.read(missionsListProvider.notifier).refresh(),
+      color: AppColors.primary,
+      child: ListView.builder(
+        padding: EdgeInsets.all(AppSizes().paddingLarge),
+        itemCount: missions.length,
+        itemBuilder: (context, index) {
+          return _buildMissionCard(
+            missions[index],
+            textColor,
+            textLightColor,
+            surfaceColor,
+          );
+        },
+      ),
     );
   }
 
-  Widget _buildEmptyState(String type, Color textColor, Color textLightColor, Color surfaceColor) {
+  Widget _buildEmptyState(
+    String type,
+    Color textColor,
+    Color textLightColor,
+    Color surfaceColor,
+  ) {
     String title;
     String subtitle;
 
@@ -332,13 +323,19 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> with SingleTickerPr
     );
   }
 
-  Widget _buildDeliveryCard(Delivery delivery, Color textColor, Color textLightColor, Color surfaceColor) {
-    // Déterminer la couleur du statut
+  Widget _buildMissionCard(
+    Mission mission,
+    Color textColor,
+    Color textLightColor,
+    Color surfaceColor,
+  ) {
+    // Couleur et texte du statut
     Color statusColor;
     String statusText;
 
-    switch (delivery.status) {
-      case 'new':
+    switch (mission.status) {
+      case 'assigned':
+      case 'pending':
         statusColor = const Color(0xFFFFA500);
         statusText = 'Nouvelle';
         break;
@@ -346,17 +343,33 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> with SingleTickerPr
         statusColor = const Color(0xFF2196F3);
         statusText = 'Acceptée';
         break;
+      case 'collecting':
+      case 'collected':
       case 'picked_up':
         statusColor = AppColors.primary;
         statusText = 'Récupérée';
+        break;
+      case 'delivering':
+        statusColor = AppColors.primary;
+        statusText = 'En livraison';
         break;
       case 'delivered':
         statusColor = const Color(0xFF4CD964);
         statusText = 'Livrée';
         break;
+      case 'not_delivered':
+      case 'not-delivered':
+        statusColor = const Color(0xFFFF6B6B);
+        statusText = 'Non livrée';
+        break;
+      case 'cancelled':
+      case 'canceled':
+        statusColor = Colors.grey;
+        statusText = 'Annulée';
+        break;
       default:
         statusColor = Colors.grey;
-        statusText = delivery.status;
+        statusText = mission.status ?? 'Inconnu';
     }
 
     return Container(
@@ -374,7 +387,7 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> with SingleTickerPr
       ),
       child: InkWell(
         onTap: () {
-          Routes.pushDeliveryDetails(delivery: delivery);
+          Routes.pushMissionDetails(missionId: mission.id.toString());
         },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
@@ -382,12 +395,12 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> with SingleTickerPr
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // En-tête avec ID et statut
+              // En-tete avec reference et statut
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '#${delivery.id}',
+                    mission.orderReference,
                     style: TextStyle(
                       color: textColor,
                       fontSize: 16.sp,
@@ -425,7 +438,7 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> with SingleTickerPr
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      delivery.restaurantName,
+                      mission.partnerName,
                       style: TextStyle(
                         color: textColor,
                         fontSize: 14.sp,
@@ -449,7 +462,7 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> with SingleTickerPr
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      delivery.customerName,
+                      mission.customerName,
                       style: TextStyle(
                         color: textColor,
                         fontSize: 13.sp,
@@ -472,7 +485,7 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> with SingleTickerPr
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      delivery.deliveryAddress,
+                      mission.dropoffAddressDisplay,
                       style: TextStyle(
                         color: textLightColor,
                         fontSize: 13.sp,
@@ -486,23 +499,24 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> with SingleTickerPr
 
               const SizedBox(height: 12),
 
-              // Infos bas (distance, temps, frais)
+              // Infos bas (distance, articles, frais)
               Row(
                 children: [
+                  if (mission.distance != null)
+                    _buildSmallBadge(
+                      'location_on',
+                      '${mission.distance!.toStringAsFixed(1)} km',
+                      const Color(0xFF4CD964),
+                    ),
+                  if (mission.distance != null) const SizedBox(width: 8),
                   _buildSmallBadge(
-                    'location_on',
-                    '${delivery.distance} km',
-                    const Color(0xFF4CD964),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildSmallBadge(
-                    'access_time',
-                    '${delivery.estimatedTime} min',
+                    'restaurant',
+                    mission.itemCountText,
                     const Color(0xFFFF6B6B),
                   ),
                   const Spacer(),
                   Text(
-                    '${delivery.deliveryFee.toStringAsFixed(0)} F',
+                    '${mission.fee.toStringAsFixed(0)} F',
                     style: TextStyle(
                       color: AppColors.primary,
                       fontSize: 16.sp,
