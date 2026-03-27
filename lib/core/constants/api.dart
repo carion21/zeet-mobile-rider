@@ -1,27 +1,12 @@
 /// Configuration des URLs de l'API pour différents environnements.
-/// Ce fichier contient toutes les constantes liées aux endpoints de l'API
-/// ainsi que les configurations des URLs pour chaque environnement.
+/// Base URL du Core API ZEET (sans le préfixe de version).
 class ApiConfig {
-  /// URL de base pour l'environnement de développement local.
-  /// Utilisée principalement pendant la phase de développement
-  /// pour tester les fonctionnalités en local.
-  static const String devBaseUrl = 'http://localhost:3000';
+  static const String devBaseUrl = 'http://localhost:8000/v1';
+  static const String testBaseUrl = 'http://46.202.170.228:8000/v1';
+  static const String prodBaseUrl = 'https://zeet-core-system-production.up.railway.app/v1';
 
-  /// URL de base pour l'environnement de test.
-  /// Utilisée pour les tests d'intégration et la validation
-  /// avant le déploiement en production.
-  static const String testBaseUrl = 'http://46.202.170.228:3000';
-
-  /// URL de base pour l'environnement de production.
-  /// Utilisée pour l'application en production avec
-  /// les données réelles.
-  static const String prodBaseUrl = 'https://api.osecours.ci/api/v1';
-
-  /// Détermine l'URL de base à utiliser en fonction de l'environnement.
-  /// Retourne l'URL appropriée selon la configuration actuelle.
   static String get baseUrl {
-    const environment = "test";
-
+    const environment = "prod";
     switch (environment) {
       case 'prod':
         return prodBaseUrl;
@@ -33,60 +18,63 @@ class ApiConfig {
   }
 }
 
-/// Endpoints relatifs à l'authentification.
-/// Contient tous les chemins d'accès pour les opérations
-/// liées à l'authentification des utilisateurs.
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
 abstract class AuthEndpoints {
-  // static const String login = '/auth/login';
+  static const String sendOtp = '/auth/send-otp';
+  static const String verifyOtp = '/auth/verify-otp';
+  static const String refresh = '/auth/refresh';
+  static const String logout = '/auth/logout';
+  static const String me = '/auth/me';
 }
 
-/// Endpoints relatifs aux opérations OTP (One Time Password).
-/// Gère les chemins d'accès pour la demande et la vérification
-/// des codes à usage unique.
-abstract class OtpEndpoints {
-  // static const String request = '/citizen/otp-request';
+// ---------------------------------------------------------------------------
+// Status & Location
+// ---------------------------------------------------------------------------
+abstract class StatusEndpoints {
+  static const String get = '/rider/status';
+  static const String setOnline = '/rider/status';
+  static const String updateLocation = '/rider/location';
 }
 
-/// Endpoints relatifs aux notifications.
-/// Contient les chemins d'accès pour la gestion des
-/// notifications utilisateur.
-abstract class NotificationEndpoints {
-  // static const String count = '/notifications/count';
+// ---------------------------------------------------------------------------
+// Deliveries (references / transitions)
+// ---------------------------------------------------------------------------
+abstract class DeliveryEndpoints {
+  static const String transitions = '/rider/deliveries/transitions';
+  static const String actions = '/rider/orders/actions';
 }
 
-/// Endpoints relatifs aux alertes.
-/// Contient les chemins d'accès pour la gestion des
-/// alertes créées par les utilisateurs.
-abstract class AlertEndpoints {
-  // static const String create = '/citizen/create-alert';
+// ---------------------------------------------------------------------------
+// Missions
+// ---------------------------------------------------------------------------
+abstract class MissionEndpoints {
+  static const String list = '/rider/missions';
+  static String get(String id) => '/rider/missions/$id';
+  static String accept(String id) => '/rider/missions/$id/accept';
+  static String reject(String id) => '/rider/missions/$id/reject';
+  static String collect(String id) => '/rider/missions/$id/collect';
+  static String deliver(String id) => '/rider/missions/$id/deliver';
+  static String notDelivered(String id) => '/rider/missions/$id/not-delivered';
 }
 
-/// Endpoints relatifs aux numéros de confiance (safe numbers).
-/// Contient les chemins d'accès pour la gestion des
-/// numéros de contact à alerter en cas d'urgence.
-abstract class SafeNumberEndpoints {
-  // static const String add = '/citizen/safe-numbers';
+// ---------------------------------------------------------------------------
+// Earnings
+// ---------------------------------------------------------------------------
+abstract class EarningsEndpoints {
+  static const String summary = '/rider/earnings';
+  static const String history = '/rider/earnings/history';
 }
 
-/// Endpoints relatifs au profil utilisateur.
-/// Contient les chemins d'accès pour la gestion du
-/// profil de l'utilisateur.
-abstract class ProfileEndpoints {
-  // static const String addEmail = '/citizen/add-email';
-}
-
-/// Classe utilitaire pour la construction des URLs.
-/// Fournit des méthodes helper pour générer les URLs
-/// complètes à partir des endpoints.
+// ---------------------------------------------------------------------------
+// Helper
+// ---------------------------------------------------------------------------
 class ApiHelper {
-  /// Construit l'URL complète en combinant l'URL de base
-  /// avec l'endpoint spécifié.
   static String buildUrl(String endpoint) {
     return '${ApiConfig.baseUrl}$endpoint';
   }
 
-  /// Construit l'URL complète en combinant l'URL de base,
-  /// l'endpoint et un identifiant spécifique.
   static String buildUrlWithId(String endpoint, String id) {
     return '${ApiConfig.baseUrl}$endpoint/$id';
   }

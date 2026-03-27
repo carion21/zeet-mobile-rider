@@ -7,10 +7,14 @@ import 'package:toastification/toastification.dart';
 import 'package:rider/core/constants/themes.dart';
 import 'package:rider/services/navigation_service.dart';
 import 'package:rider/providers/theme_provider.dart';
+import 'package:rider/services/token_service.dart';
 
-void main() {
+void main() async {
   // Assurer que l'initialisation des widgets est complète
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialiser le service de tokens avant le lancement de l'app
+  await TokenService.instance.init();
 
   // Définir l'orientation de l'application
   SystemChrome.setPreferredOrientations([
