@@ -1,5 +1,6 @@
 // lib/screens/home/index.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/sizes.dart';
@@ -7,20 +8,19 @@ import 'package:rider/core/constants/icons.dart';
 import 'package:rider/core/constants/assets.dart';
 import 'package:rider/core/widgets/toastification.dart';
 import 'package:rider/services/navigation_service.dart';
+import 'package:rider/providers/status_provider.dart';
+import 'package:rider/providers/auth_provider.dart';
 import 'package:rider/models/delivery_model.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  // Statut du livreur
-  bool _isOnline = false;
-
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   // Gains du jour en FCFA
   final double _dailyEarnings = 15750.0;
 
@@ -30,7 +30,27 @@ class _HomeScreenState extends State<HomeScreen> {
   // Livraisons en attente
   int get _pendingDeliveries => _activeDeliveries.where((d) => d.status == 'new').length;
 
+  @override
+  void initState() {
+    super.initState();
+    // Charger le statut du rider au demarrage
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initStatus();
+    });
+  }
+
+  void _initStatus() {
+    // Synchroniser le statut local avec le rider_status du profil
+    final rider = ref.read(currentRiderProvider);
+    if (rider != null) {
+      ref.read(statusProvider.notifier).setOnlineLocally(rider.isOnline);
+    }
+    // Puis charger le statut depuis l'API dediee
+    ref.read(statusProvider.notifier).loadStatus();
+  }
+
   // Exemples de livraisons en cours
+  // TODO: Remplacer par les missions depuis missionProvider (BLOC 2)
   final List<Delivery> _activeDeliveries = [
     Delivery(
       id: 'DLV001',
@@ -64,6 +84,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Watch providers so that build() re-runs when they change
+    ref.watch(isOnlineProvider);
+    ref.watch(currentRiderProvider);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDarkMode ? AppColors.darkText : AppColors.text;
     final textLightColor = isDarkMode ? AppColors.darkTextLight : AppColors.textLight;
@@ -245,13 +268,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           width: 7,
                           height: 7,
                           decoration: BoxDecoration(
-                            color: _isOnline ? const Color(0xFF4CD964) : Colors.grey,
+                            color: ref.read(isOnlineProvider) ? const Color(0xFF4CD964) : Colors.grey,
                             shape: BoxShape.circle,
                           ),
                         ),
                         const SizedBox(width: 5),
                         Text(
-                          _isOnline ? 'En ligne' : 'Hors ligne',
+                          ref.read(isOnlineProvider) ? 'En ligne' : 'Hors ligne',
                           style: TextStyle(
                             color: textColor,
                             fontWeight: FontWeight.w600,
@@ -282,7 +305,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: Center(
           child: Text(
-            'KJ',
+            ref.read(currentRiderProvider)?.initials ?? '',
             style: TextStyle(
               color: Colors.white,
               fontSize: 16.sp,
@@ -544,7 +567,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _isOnline
+                          ref.read(isOnlineProvider)
                               ? 'Les nouvelles commandes\napparaîtront ici'
                               : 'Mettez-vous en ligne\npour recevoir des livraisons',
                           style: TextStyle(

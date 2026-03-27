@@ -1,22 +1,25 @@
 // lib/screens/profile/index.dart
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/sizes.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:rider/core/widgets/toastification.dart';
 import 'package:rider/core/widgets/app_popup.dart';
 import 'package:rider/services/navigation_service.dart';
+import 'package:rider/providers/status_provider.dart';
+import 'package:rider/providers/auth_provider.dart';
 import 'controllers.dart';
 
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late final ProfileController _controller;
 
   @override
@@ -33,22 +36,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _toggleOnlineStatus() async {
-    setState(() => _controller.isLoading = true);
-
-    final result = await _controller.toggleOnlineStatus();
+    final result = await ref.read(statusProvider.notifier).toggleOnline();
 
     if (!mounted) return;
-    setState(() => _controller.isLoading = false);
 
-    if (result['success']) {
+    if (result['success'] == true) {
       AppToast.showSuccess(
         context: context,
-        message: result['message'],
+        message: result['message'] as String,
       );
     } else {
       AppToast.showError(
         context: context,
-        message: result['message'],
+        message: result['message'] as String,
       );
     }
   }
@@ -87,28 +87,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (confirm == true) {
-      final result = await _controller.logout();
+      await ref.read(authProvider.notifier).logout();
 
       if (!mounted) return;
-      if (result['success']) {
-        AppToast.showSuccess(
-          context: context,
-          message: result['message'],
-        );
+      AppToast.showSuccess(
+        context: context,
+        message: 'Deconnexion reussie',
+      );
 
-        // Rediriger vers la page de connexion
-        Routes.navigateAndRemoveAll(Routes.login);
-      } else {
-        AppToast.showError(
-          context: context,
-          message: result['message'],
-        );
-      }
+      // Rediriger vers la page de connexion
+      Routes.navigateAndRemoveAll(Routes.login);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Watch providers to trigger rebuild on changes
+    ref.watch(statusProvider);
+    ref.watch(currentRiderProvider);
     AppSizes().initialize(context);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDarkMode ? AppColors.darkText : AppColors.text;
@@ -230,7 +226,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           child: Center(
             child: Text(
-              _controller.initials,
+              ref.read(currentRiderProvider)?.initials ?? _controller.initials,
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 32.sp,
@@ -243,7 +239,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         // Nom de l'utilisateur
         Text(
-          _controller.userName,
+          ref.read(currentRiderProvider)?.fullName ?? _controller.userName,
           style: TextStyle(
             color: textColor,
             fontSize: 20.sp,
@@ -254,7 +250,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // Numéro de téléphone
         const SizedBox(height: 4),
         Text(
-          _controller.phoneNumber,
+          ref.read(currentRiderProvider)?.phone ?? _controller.phoneNumber,
           style: TextStyle(
             color: AppColors.primary,
             fontSize: 16.sp,
@@ -284,7 +280,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     width: 12,
                     height: 12,
                     decoration: BoxDecoration(
-                      color: _controller.isOnline ? Colors.green : Colors.grey,
+                      color: ref.read(statusProvider).isOnline ? Colors.green : Colors.grey,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -301,7 +297,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        _controller.isOnline ? 'En ligne' : 'Hors ligne',
+                        ref.read(statusProvider).isOnline ? 'En ligne' : 'Hors ligne',
                         style: TextStyle(
                           color: textColor,
                           fontSize: 16.sp,
@@ -313,8 +309,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
               Switch(
-                value: _controller.isOnline,
-                onChanged: _controller.isLoading ? null : (value) => _toggleOnlineStatus(),
+                value: ref.read(statusProvider).isOnline,
+                onChanged: ref.read(statusProvider).isLoading ? null : (value) => _toggleOnlineStatus(),
                 activeColor: Colors.green,
               ),
             ],
