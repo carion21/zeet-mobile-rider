@@ -1,8 +1,8 @@
 // screens/auth/login/controllers.dart
-import 'package:rider/services/navigation_service.dart';
 import 'package:flutter/material.dart';
 
-/// Controller pour gérer la logique de la page de connexion
+/// Controller pour gérer la logique de validation de la page de connexion.
+/// Les appels API sont désormais gérés via le AuthProvider (Riverpod).
 class LoginController {
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
   final TextEditingController phoneController = TextEditingController();
@@ -47,57 +47,6 @@ class LoginController {
       return 'Le numéro doit commencer par 01, 05 ou 07';
     }
     return null;
-  }
-
-  /// Gère la soumission du formulaire de connexion
-  Future<Map<String, dynamic>> handleSubmit() async {
-    if (!formKey.currentState!.validate()) {
-      return {'success': false, 'message': 'Veuillez corriger les erreurs du formulaire'};
-    }
-
-    try {
-      isLoading = true;
-
-      // Simulation d'un appel API pour demander un code OTP
-      // En réalité, il faudrait appeler un service d'authentification
-      // final otpResult = await _authService.requestOtp(
-      //   type: "login",
-      //   phoneNumber: phoneController.text
-      // );
-
-      // Simulation d'un délai réseau
-      await Future.delayed(const Duration(seconds: 1));
-
-      // Simulation d'une réponse positive
-      final otpResult = {
-        'success': true,
-        'message': 'OTP créé avec succès et SMS envoyé avec succès.'
-      };
-
-      isLoading = false;
-
-      if (otpResult['success'] == true) {
-        // Ce code permettra de naviguer vers la page OTP
-        Routes.pushVerifyOtp(
-          phoneNumber: phoneController.text,
-          type: 'login',
-        );
-
-        return {
-          'success': true,
-          'message': 'Code envoyé avec succès',
-          'phoneNumber': phoneController.text
-        };
-      } else {
-        return {
-          'success': false,
-          'message': otpResult['message'] ?? 'Erreur lors de l\'envoi du code OTP'
-        };
-      }
-    } catch (e) {
-      isLoading = false;
-      return {'success': false, 'message': 'Une erreur s\'est produite: $e'};
-    }
   }
 
   /// Formate le numéro de téléphone pour affichage (+225 XXXXXXXXXX)

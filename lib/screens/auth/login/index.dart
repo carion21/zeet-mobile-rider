@@ -1,21 +1,24 @@
 // screens/auth/login/index.dart
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/sizes.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:rider/core/widgets/toastification.dart';
+import 'package:rider/providers/auth_provider.dart';
+import 'package:rider/services/navigation_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'controllers.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends ConsumerState<LoginScreen> {
   late final LoginController _controller;
 
   @override
@@ -36,8 +39,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _controller.isLoading = true);
 
-    final result = await _controller.handleSubmit();
+    // Appel API via le provider Riverpod
+    final result = await ref.read(authProvider.notifier).sendOtp(
+      phone: _controller.phoneController.text,
+    );
 
+    if (!mounted) return;
     setState(() => _controller.isLoading = false);
 
     if (result['success']) {
@@ -47,7 +54,11 @@ class _LoginScreenState extends State<LoginScreen> {
         message: "Un code a été envoyé au ${_controller.formatPhoneNumber(_controller.phoneController.text)}",
       );
 
-      // La navigation est gérée dans le controller
+      // Naviguer vers l'écran OTP
+      Routes.pushVerifyOtp(
+        phoneNumber: _controller.phoneController.text,
+        type: 'login',
+      );
     } else {
       // Afficher un message d'erreur
       AppToast.showError(

@@ -1,18 +1,21 @@
 // lib/screens/splash/index.dart
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:rider/providers/auth_provider.dart';
 import 'package:rider/services/navigation_service.dart';
 
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
+class _SplashScreenState extends ConsumerState<SplashScreen> with TickerProviderStateMixin {
   late AnimationController _liquidController;
   late AnimationController _fadeController;
   late Animation<double> _liquidAnimation;
@@ -52,12 +55,42 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       }
     });
 
-    // Navigation vers l'écran de connexion après 5 secondes (3s animation + 2s attente)
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted) {
-        Routes.navigateAndReplace(Routes.login);
-      }
-    });
+    // Vérifier l'état d'authentification et naviguer après l'animation
+    _checkAuthAndNavigate();
+  }
+
+  Future<void> _checkAuthAndNavigate() async {
+    debugPrint('🏍️ [Splash] Début checkAuthAndNavigate');
+
+    try {
+      // Lancer la vérification d'auth avec un timeout de sécurité
+      await Future.wait([
+        ref.read(authProvider.notifier).checkAuthStatus().timeout(
+              const Duration(seconds: 8),
+              onTimeout: () {
+                debugPrint('🏍️ [Splash] checkAuthStatus timeout');
+              },
+            ),
+        Future.delayed(const Duration(seconds: 4)),
+      ]);
+    } catch (e) {
+      debugPrint('🏍️ [Splash] Erreur checkAuthStatus: $e');
+    }
+
+    debugPrint('🏍️ [Splash] Auth check terminé, navigation...');
+
+    if (!mounted) return;
+
+    final authState = ref.read(authProvider);
+    debugPrint('🏍️ [Splash] Status: ${authState.status}');
+
+    if (authState.status == AuthStatus.authenticated) {
+      debugPrint('🏍️ [Splash] → Home');
+      Routes.navigateAndReplace(Routes.home);
+    } else {
+      debugPrint('🏍️ [Splash] → Login');
+      Routes.navigateAndReplace(Routes.login);
+    }
   }
 
   @override
