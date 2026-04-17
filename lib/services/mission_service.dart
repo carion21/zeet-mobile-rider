@@ -1,4 +1,5 @@
 import 'package:rider/core/constants/api.dart';
+import 'package:rider/models/mission_log_model.dart';
 import 'package:rider/services/api_client.dart';
 
 /// Service pour les missions de livraison du rider.
@@ -103,6 +104,22 @@ class MissionService {
       body: body,
     );
     return response;
+  }
+
+  // ---------------------------------------------------------------------------
+  // GET /v1/rider/missions/:id/logs
+  // ---------------------------------------------------------------------------
+  /// Recupere l'audit trail d'une mission (timeline des transitions/events).
+  Future<List<MissionLogEntry>> getMissionLogs(String id) async {
+    final response = await _apiClient.get(MissionEndpoints.logs(id));
+    final rawData = response['data'] ?? response['logs'];
+    if (rawData is List) {
+      return rawData
+          .whereType<Map>()
+          .map((e) => MissionLogEntry.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+    return const <MissionLogEntry>[];
   }
 
   // ---------------------------------------------------------------------------

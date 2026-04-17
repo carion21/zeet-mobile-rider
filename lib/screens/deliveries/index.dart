@@ -7,7 +7,10 @@ import 'package:rider/core/constants/sizes.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:rider/services/navigation_service.dart';
 import 'package:rider/providers/mission_provider.dart';
+import 'package:rider/providers/connectivity_provider.dart';
 import 'package:rider/models/mission_model.dart';
+import 'package:rider/screens/deliveries/widgets/completed_tab.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 
 class DeliveriesScreen extends ConsumerStatefulWidget {
   const DeliveriesScreen({super.key});
@@ -58,36 +61,36 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen>
             // Tabs
             _buildTabs(surfaceColor, textColor, textLightColor, missionsState),
 
-            // Liste des missions
+            // Liste des missions, wrappée dans ZeetScreenScaffold pour
+            // gérer ELOE (loading/empty/error/offline) de manière unifiée
+            // à travers le design system.
             Expanded(
-              child: missionsState.isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : TabBarView(
-                      controller: _tabController,
-                      children: [
-                        _buildMissionList(
-                          missionsState.available,
-                          textColor,
-                          textLightColor,
-                          surfaceColor,
-                          'new',
-                        ),
-                        _buildMissionList(
-                          missionsState.ongoing,
-                          textColor,
-                          textLightColor,
-                          surfaceColor,
-                          'ongoing',
-                        ),
-                        _buildMissionList(
-                          missionsState.completed,
-                          textColor,
-                          textLightColor,
-                          surfaceColor,
-                          'completed',
-                        ),
-                      ],
-                    ),
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildMissionTab(
+                    missionsState.available,
+                    missionsState,
+                    textColor,
+                    textLightColor,
+                    surfaceColor,
+                    'new',
+                  ),
+                  _buildMissionTab(
+                    missionsState.ongoing,
+                    missionsState,
+                    textColor,
+                    textLightColor,
+                    surfaceColor,
+                    'ongoing',
+                  ),
+                  // L'onglet "Terminées" consomme desormais
+                  // GET /v1/rider/deliveries (historique paginé réel)
+                  // au lieu d'un filtre client-side sur les missions
+                  // actives (gap analysis 2026-04-15).
+                  const CompletedDeliveriesTab(),
+                ],
+              ),
             ),
           ],
         ),
@@ -228,99 +231,86 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen>
     );
   }
 
-  Widget _buildMissionList(
+  /// Enveloppe un tab de missions dans un [ZeetScreenScaffold] qui gère
+  /// tous les états ELOE (loading skeleton / empty / error / offline) de
+  /// manière unifiée. Le [RefreshIndicator] est conservé autour du
+  /// scaffold pour permettre le pull-to-refresh même quand la liste est
+  /// vide (state == content avec 0 items remplacé par state.empty).
+  Widget _buildMissionTab(
     List<Mission> missions,
+    MissionsListState missionsState,
     Color textColor,
     Color textLightColor,
     Color surfaceColor,
     String type,
   ) {
-    if (missions.isEmpty) {
-      return _buildEmptyState(type, textColor, textLightColor, surfaceColor);
-    }
+    final bool isOnline = ref
+        .watch(connectivityStatusProvider)
+        .maybeWhen(data: (v) => v, orElse: () => true);
+
+    final ZeetScreenState screenState =
+        _resolveState(missionsState, missions, isOnline);
+
+    // Micro-copy contextualisée par type d'onglet.
+    final (String emptyTitle, String emptySubtitle) = switch (type) {
+      'new' => (
+          'Aucune mission en cours',
+          "Quand une mission est disponible, elle apparaîtra ici",
+        ),
+      'ongoing' => (
+          'Aucune livraison en cours',
+          'Accepte une mission pour commencer',
+        ),
+      _ => (
+          'Aucune livraison',
+          "Rien à afficher pour le moment",
+        ),
+    };
 
     return RefreshIndicator(
       onRefresh: () => ref.read(missionsListProvider.notifier).refresh(),
       color: AppColors.primary,
-      child: ListView.builder(
-        padding: EdgeInsets.all(AppSizes().paddingLarge),
-        itemCount: missions.length,
-        itemBuilder: (context, index) {
-          return _buildMissionCard(
-            missions[index],
-            textColor,
-            textLightColor,
-            surfaceColor,
-          );
-        },
+      child: ZeetScreenScaffold(
+        state: screenState,
+        onRetry: () => ref.read(missionsListProvider.notifier).refresh(),
+        emptyTitle: emptyTitle,
+        emptySubtitle: emptySubtitle,
+        emptyIcon: Icons.inbox_outlined,
+        errorMessage: missionsState.errorMessage,
+        child: ListView.builder(
+          padding: EdgeInsets.all(AppSizes().paddingLarge),
+          itemCount: missions.length,
+          itemBuilder: (context, index) {
+            return _buildMissionCard(
+              missions[index],
+              textColor,
+              textLightColor,
+              surfaceColor,
+            );
+          },
+        ),
       ),
     );
   }
 
-  Widget _buildEmptyState(
-    String type,
-    Color textColor,
-    Color textLightColor,
-    Color surfaceColor,
+  ZeetScreenState _resolveState(
+    MissionsListState missionsState,
+    List<Mission> missions,
+    bool isOnline,
   ) {
-    String title;
-    String subtitle;
-
-    switch (type) {
-      case 'new':
-        title = 'Aucune nouvelle livraison';
-        subtitle = 'Les nouvelles commandes\napparaîtront ici';
-        break;
-      case 'ongoing':
-        title = 'Aucune livraison en cours';
-        subtitle = 'Acceptez une livraison\npour commencer';
-        break;
-      case 'completed':
-        title = 'Aucune livraison terminée';
-        subtitle = 'Vos livraisons terminées\napparaîtront ici';
-        break;
-      default:
-        title = 'Aucune livraison';
-        subtitle = '';
+    if (missionsState.isLoading && missions.isEmpty) {
+      return ZeetScreenState.loading;
     }
-
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              shape: BoxShape.circle,
-            ),
-            child: IconManager.getIcon(
-              'delivery',
-              color: Colors.grey.shade400,
-              size: 52,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            title,
-            style: TextStyle(
-              color: textColor,
-              fontSize: 18.sp,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            subtitle,
-            style: TextStyle(
-              color: textLightColor,
-              fontSize: 14.sp,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
+    if (!isOnline && missions.isEmpty) {
+      return ZeetScreenState.offline;
+    }
+    if (missionsState.errorMessage != null && missions.isEmpty) {
+      return ZeetScreenState.error;
+    }
+    if (missions.isEmpty) {
+      return ZeetScreenState.empty;
+    }
+    return ZeetScreenState.content;
   }
 
   Widget _buildMissionCard(
@@ -515,8 +505,9 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen>
                     const Color(0xFFFF6B6B),
                   ),
                   const Spacer(),
-                  Text(
-                    '${mission.fee.toStringAsFixed(0)} F',
+                  ZeetMoney(
+                    amount: mission.fee,
+                    currency: ZeetCurrency.fcfa,
                     style: TextStyle(
                       color: AppColors.primary,
                       fontSize: 16.sp,

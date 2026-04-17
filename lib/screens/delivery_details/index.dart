@@ -1,5 +1,6 @@
 // lib/screens/delivery_details/index.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -8,11 +9,14 @@ import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/sizes.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:rider/core/widgets/toastification.dart';
+import 'package:rider/core/utils/phone_launcher.dart';
 import 'package:rider/services/navigation_service.dart';
 import 'package:rider/services/routing_service.dart';
 import 'package:rider/providers/mission_provider.dart';
 import 'package:rider/models/mission_model.dart';
+import 'package:rider/screens/delivery_details/widgets/mission_logs_sheet.dart';
 import 'package:intl/intl.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 
 class DeliveryDetailsScreen extends ConsumerStatefulWidget {
   /// ID de la mission a charger depuis l'API.
@@ -173,6 +177,8 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
   // ---------------------------------------------------------------------------
 
   Future<void> _handleAccept() async {
+    // Haptic feedback POS : confirme le tap du rider sous gants.
+    await HapticFeedback.mediumImpact();
     final result = await ref.read(missionDetailProvider.notifier).accept();
     if (!mounted) return;
 
@@ -188,6 +194,8 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
   }
 
   Future<void> _handleReject() async {
+    // Haptic plus fort sur action destructive pour alerter le rider.
+    await HapticFeedback.heavyImpact();
     final reason = await _showReasonDialog('Refuser la mission', 'Raison du refus');
     if (reason == null || reason.isEmpty) return;
 
@@ -204,6 +212,7 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
   }
 
   Future<void> _handleCollect() async {
+    await HapticFeedback.mediumImpact();
     final otp = await _showOtpDialog('Code de collecte', 'Entrez le code OTP du restaurant');
     if (otp == null || otp.isEmpty) return;
 
@@ -222,6 +231,7 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
   }
 
   Future<void> _handleDeliver() async {
+    await HapticFeedback.mediumImpact();
     final otp = await _showOtpDialog('Code de livraison', 'Entrez le code OTP du client');
     if (otp == null || otp.isEmpty) return;
 
@@ -229,6 +239,8 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
     if (!mounted) return;
 
     if (result['success'] == true) {
+      // Haptic de succès = double medium impact (boucle dopaminergique).
+      await HapticFeedback.heavyImpact();
       ref.read(missionsListProvider.notifier).updateMissionStatus(
         int.parse(widget.missionId!),
         'delivered',
@@ -240,6 +252,7 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
   }
 
   Future<void> _handleNotDelivered() async {
+    await HapticFeedback.heavyImpact();
     final reason = await _showReasonDialog('Livraison impossible', 'Raison');
     if (reason == null || reason.isEmpty) return;
 
@@ -623,6 +636,35 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
               ),
             ),
           ),
+          const Spacer(),
+          // Bouton historique de mission (logs)
+          if (mission != null)
+            GestureDetector(
+              onTap: () => showMissionLogsSheet(
+                context,
+                missionId: mission.id.toString(),
+              ),
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.history_rounded,
+                  color: AppColors.text,
+                  size: 22,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -834,9 +876,14 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
               ),
               if (mission.partnerPhone != null)
                 IconButton(
-                  onPressed: () {
-                    AppToast.showInfo(context: context, message: 'Appel au restaurant');
+                  onPressed: () async {
+                    HapticFeedback.selectionClick();
+                    await launchPhoneCall(
+                      mission.partnerPhone!,
+                      context: context,
+                    );
                   },
+                  tooltip: 'Appeler le restaurant',
                   icon: IconManager.getIcon('phone', color: AppColors.primary, size: 22),
                 ),
             ],
@@ -903,9 +950,14 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
               ),
               if (mission.customerPhone != null)
                 IconButton(
-                  onPressed: () {
-                    AppToast.showInfo(context: context, message: 'Appel au client');
+                  onPressed: () async {
+                    HapticFeedback.selectionClick();
+                    await launchPhoneCall(
+                      mission.customerPhone!,
+                      context: context,
+                    );
                   },
+                  tooltip: 'Appeler le client',
                   icon: IconManager.getIcon('phone', color: const Color(0xFF4CD964), size: 22),
                 ),
             ],
@@ -951,8 +1003,9 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
                       style: TextStyle(color: textLightColor, fontSize: 12.sp),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      '${mission.fee.toStringAsFixed(0)} F',
+                    ZeetMoney(
+                      amount: mission.fee,
+                      currency: ZeetCurrency.fcfa,
                       style: TextStyle(
                         color: AppColors.primary,
                         fontSize: 16.sp,
@@ -975,8 +1028,23 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
   }
 
   Widget _buildActionButtons(Mission mission, Color statusColor, bool isLoading) {
+    // Transition fluide entre les CTAs lors du changement de statut mission.
+    // Le switcher du design system encapsule fade + slide sur tokens motion
+    // (vague 3+ : on a remplacé l'AnimatedSwitcher custom par ZeetStateSwitcher).
+    final String stateKey = isLoading ? 'loading' : (mission.status ?? 'none');
+    return ZeetStateSwitcher(
+      stateKey: stateKey,
+      alignment: Alignment.topCenter,
+      child: _actionButtonsFor(mission, statusColor, isLoading),
+    );
+  }
+
+  Widget _actionButtonsFor(Mission mission, Color statusColor, bool isLoading) {
     if (isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        key: ValueKey('buttons_loading'),
+        child: CircularProgressIndicator(),
+      );
     }
 
     final status = mission.status ?? '';
@@ -985,6 +1053,7 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
       case 'assigned':
       case 'pending':
         return Column(
+          key: const ValueKey('buttons_assigned'),
           children: [
             SizedBox(
               width: double.infinity,
@@ -1025,6 +1094,7 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
 
       case 'accepted':
         return Column(
+          key: const ValueKey('buttons_accepted'),
           children: [
             SizedBox(
               width: double.infinity,
@@ -1068,6 +1138,7 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
       case 'picked_up':
       case 'delivering':
         return Column(
+          key: const ValueKey('buttons_delivering'),
           children: [
             SizedBox(
               width: double.infinity,
@@ -1112,6 +1183,7 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
       case 'cancelled':
       case 'canceled':
         return SizedBox(
+          key: const ValueKey('buttons_final'),
           width: double.infinity,
           height: 50,
           child: ElevatedButton(
@@ -1130,7 +1202,7 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
         );
 
       default:
-        return const SizedBox.shrink();
+        return const SizedBox.shrink(key: ValueKey('buttons_none'));
     }
   }
 
@@ -1329,8 +1401,9 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
                     color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(
-                    '${mission?.fee.toStringAsFixed(0) ?? '0'} F',
+                  child: ZeetMoney(
+                    amount: mission?.fee ?? 0,
+                    currency: ZeetCurrency.fcfa,
                     style: TextStyle(color: AppColors.primary, fontSize: 14.sp, fontWeight: FontWeight.bold),
                   ),
                 ),
