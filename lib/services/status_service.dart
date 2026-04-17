@@ -1,8 +1,10 @@
 import 'package:rider/core/constants/api.dart';
+import 'package:rider/models/availability_log_model.dart';
 import 'package:rider/services/api_client.dart';
 
 /// Service pour le statut et la localisation du rider.
-/// Encapsule les appels aux endpoints `/v1/rider/status` et `/v1/rider/location`.
+/// Encapsule les appels aux endpoints `/v1/rider/status`, `/v1/rider/location`
+/// et `/v1/rider/availability-log`.
 class StatusService {
   final ApiClient _apiClient;
 
@@ -51,5 +53,53 @@ class StatusService {
       },
     );
     return response;
+  }
+
+  // ---------------------------------------------------------------------------
+  // GET /v1/rider/availability-log
+  // ---------------------------------------------------------------------------
+  /// Recupere l'historique pagine des bascules online/offline du rider.
+  Future<AvailabilityLogPage> getAvailabilityLog({
+    int page = 1,
+    int limit = 25,
+    String? dateFrom,
+    String? dateTo,
+  }) async {
+    final queryParams = <String, String>{
+      'page': page.toString(),
+      'limit': limit.toString(),
+    };
+    if (dateFrom != null && dateFrom.isNotEmpty) {
+      queryParams['date_from'] = dateFrom;
+    }
+    if (dateTo != null && dateTo.isNotEmpty) {
+      queryParams['date_to'] = dateTo;
+    }
+
+    final response = await _apiClient.get(
+      StatusEndpoints.availabilityLog,
+      queryParams: queryParams,
+    );
+
+    final rawData = response['data'];
+    final items = rawData is List
+        ? rawData
+            .whereType<Map>()
+            .map((e) =>
+                AvailabilityLogEntry.fromJson(Map<String, dynamic>.from(e)))
+            .toList()
+        : <AvailabilityLogEntry>[];
+
+    final meta = response['meta'] is Map<String, dynamic>
+        ? AvailabilityLogMeta.fromJson(
+            response['meta'] as Map<String, dynamic>)
+        : AvailabilityLogMeta(
+            total: items.length,
+            page: page,
+            limit: limit,
+            totalPages: 1,
+          );
+
+    return AvailabilityLogPage(data: items, meta: meta);
   }
 }
