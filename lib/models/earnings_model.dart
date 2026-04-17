@@ -7,6 +7,35 @@
 // Earnings Summary
 // ---------------------------------------------------------------------------
 
+/// Point de la serie temporelle de gains (une tranche de la periode).
+/// Correspond a un element de `by_period` retourne par `GET /v1/rider/earnings`.
+class EarningsPeriodPoint {
+  /// Date ou tranche horaire brute retournee par l'API (ex: "2026-03-27" ou "08:00").
+  final String date;
+  final int deliveryCount;
+  final double earnings;
+
+  const EarningsPeriodPoint({
+    required this.date,
+    this.deliveryCount = 0,
+    this.earnings = 0,
+  });
+
+  factory EarningsPeriodPoint.fromJson(Map<String, dynamic> json) {
+    return EarningsPeriodPoint(
+      date: (json['date'] ?? json['label'] ?? json['period'] ?? '').toString(),
+      deliveryCount: json['delivery_count'] as int?
+          ?? json['deliveries'] as int?
+          ?? json['count'] as int?
+          ?? 0,
+      earnings: _parseDouble(
+            json['earnings'] ?? json['total_earnings'] ?? json['amount'],
+          ) ??
+          0,
+    );
+  }
+}
+
 /// Resume des gains sur une periode (jour, semaine, mois).
 class EarningsSummary {
   final double totalEarnings;
@@ -20,6 +49,7 @@ class EarningsSummary {
   final String? period;
   final String? dateFrom;
   final String? dateTo;
+  final List<EarningsPeriodPoint> byPeriod;
 
   const EarningsSummary({
     this.totalEarnings = 0,
@@ -33,6 +63,7 @@ class EarningsSummary {
     this.period,
     this.dateFrom,
     this.dateTo,
+    this.byPeriod = const [],
   });
 
   factory EarningsSummary.fromJson(Map<String, dynamic> json) {
@@ -59,6 +90,16 @@ class EarningsSummary {
       json['average_per_delivery'] ?? json['average'],
     ) ?? (completedDeliveries > 0 ? totalEarnings / completedDeliveries : 0);
 
+    final byPeriodRaw = json['by_period'] ?? json['series'] ?? json['breakdown'];
+    final byPeriod = <EarningsPeriodPoint>[];
+    if (byPeriodRaw is List) {
+      for (final item in byPeriodRaw) {
+        if (item is Map<String, dynamic>) {
+          byPeriod.add(EarningsPeriodPoint.fromJson(item));
+        }
+      }
+    }
+
     return EarningsSummary(
       totalEarnings: totalEarnings,
       deliveryFees: deliveryFees,
@@ -71,6 +112,7 @@ class EarningsSummary {
       period: json['period'] as String?,
       dateFrom: json['date_from'] as String? ?? json['from'] as String?,
       dateTo: json['date_to'] as String? ?? json['to'] as String?,
+      byPeriod: byPeriod,
     );
   }
 }
