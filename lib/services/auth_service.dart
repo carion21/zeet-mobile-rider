@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:rider/core/constants/api.dart';
 import 'package:rider/models/rider_model.dart';
 import 'package:rider/services/api_client.dart';
+import 'package:rider/services/device_token_manager.dart';
 import 'package:rider/services/token_service.dart';
 
 /// Service d'authentification.
@@ -68,6 +71,11 @@ class AuthService {
         accessToken: accessToken,
         refreshToken: refreshToken,
       );
+
+      // Enregistrer le device token FCM aupres du backend (best-effort).
+      // CRITIQUE cote rider : le push est la seule facon de reveiller le
+      // livreur sur une mission disponible.
+      unawaited(DeviceTokenManager.instance.registerCurrentDevice());
     }
 
     return response;
@@ -135,6 +143,12 @@ class AuthService {
   /// puis supprime les tokens locaux.
   Future<void> logout() async {
     final refreshToken = await _tokenService.getRefreshToken();
+
+    // Desenregistrer le device token FCM AVANT de purger la session
+    // pour que l'appel DELETE reste authentifie.
+    try {
+      await DeviceTokenManager.instance.unregisterCurrentDevice();
+    } catch (_) {}
 
     // Tenter de notifier le serveur (best-effort)
     if (refreshToken != null && refreshToken.isNotEmpty) {

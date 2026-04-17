@@ -1,131 +1,69 @@
 // lib/screens/profile/controllers.dart
+//
+// Controller UI du screen profil. Ne contient plus de logique mock : la
+// mutation du profil passe par `profileEditProvider` (cf. index.dart), ce
+// controller ne gere que les TextEditingController et la validation
+// locale (format email, vide, etc.).
+
 import 'package:flutter/material.dart';
 
 class ProfileController {
-  // Contrôleurs pour les champs de formulaire
-  final TextEditingController nameController = TextEditingController();
+  // Controllers des champs de formulaire.
+  final TextEditingController firstnameController = TextEditingController();
+  final TextEditingController lastnameController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
-  final TextEditingController phoneController = TextEditingController();
 
-  // Focus nodes pour les champs de formulaire
+  // Focus nodes.
+  final FocusNode firstnameFocusNode = FocusNode();
+  final FocusNode lastnameFocusNode = FocusNode();
   final FocusNode emailFocusNode = FocusNode();
 
-  // Clé pour le formulaire (validation)
+  // Cle du formulaire pour la validation.
   final GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
-  // État d'édition
+  // Etat local de l'ecran.
   bool isEditing = false;
-  bool isLoading = false;
 
-  // Statut du livreur
-  bool isOnline = false;
+  // Gender courant (null | 'male' | 'female'). Aligne sur le backend.
+  String? gender;
 
-  // Données utilisateur pré-remplies
-  String userName = "Kouassi Jean";
-  String initials = "KJ";
-  String phoneNumber = "+225 0707070707";
-  String? email;
-
-  // Statistiques du livreur
-  int totalDeliveries = 127;
-  double averageRating = 4.8;
-
-  // Initialiser les contrôleurs avec les données actuelles
-  void initControllers() {
-    nameController.text = userName;
-    phoneController.text = phoneNumber;
-    if (email != null) emailController.text = email!;
+  /// Pre-remplit les champs depuis les donnees actuelles du rider.
+  void hydrate({
+    String? firstname,
+    String? lastname,
+    String? email,
+    String? gender,
+  }) {
+    firstnameController.text = firstname ?? '';
+    lastnameController.text = lastname ?? '';
+    emailController.text = email ?? '';
+    this.gender = gender;
   }
 
-  // Validation de l'email
+  /// Validation email cote client. L'email est optionnel.
   String? validateEmail(String? value) {
-    if (value == null || value.isEmpty) {
-      return null; // L'email est optionnel
+    if (value == null || value.trim().isEmpty) return null;
+    final emailRegex =
+        RegExp(r'^[\w\.\-\+]+@([\w\-]+\.)+[\w\-]{2,}$');
+    if (!emailRegex.hasMatch(value.trim())) {
+      return 'Email invalide';
     }
-
-    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-    if (!emailRegex.hasMatch(value)) {
-      return 'Veuillez entrer un email valide';
-    }
-
     return null;
   }
 
-  // Basculer le statut en ligne/hors ligne
-  Future<Map<String, dynamic>> toggleOnlineStatus() async {
-    isLoading = true;
-
-    try {
-      // Simuler un appel API pour changer le statut
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      isOnline = !isOnline;
-      isLoading = false;
-
-      return {
-        'success': true,
-        'message': isOnline ? 'Vous êtes maintenant en ligne' : 'Vous êtes maintenant hors ligne',
-        'isOnline': isOnline,
-      };
-    } catch (e) {
-      isLoading = false;
-      return {'success': false, 'message': 'Une erreur s\'est produite: $e'};
+  String? validateRequired(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Champ requis';
     }
+    return null;
   }
 
-  // Soumettre les modifications
-  Future<Map<String, dynamic>> saveChanges() async {
-    if (!formKey.currentState!.validate()) {
-      return {'success': false, 'message': 'Veuillez corriger les erreurs du formulaire'};
-    }
-
-    isLoading = true;
-
-    try {
-      // Simuler un appel API pour enregistrer les modifications
-      await Future.delayed(const Duration(seconds: 1));
-
-      // Mise à jour des données
-      email = emailController.text.isNotEmpty ? emailController.text : null;
-
-      isLoading = false;
-      isEditing = false;
-
-      return {
-        'success': true,
-        'message': 'Profil mis à jour avec succès',
-      };
-    } catch (e) {
-      isLoading = false;
-      return {'success': false, 'message': 'Une erreur s\'est produite: $e'};
-    }
-  }
-
-  // Déconnexion
-  Future<Map<String, dynamic>> logout() async {
-    isLoading = true;
-
-    try {
-      // Simuler un appel API pour la déconnexion
-      await Future.delayed(const Duration(seconds: 1));
-
-      isLoading = false;
-
-      return {
-        'success': true,
-        'message': 'Déconnexion réussie',
-      };
-    } catch (e) {
-      isLoading = false;
-      return {'success': false, 'message': 'Une erreur s\'est produite: $e'};
-    }
-  }
-
-  // Libérer les ressources
   void dispose() {
-    nameController.dispose();
+    firstnameController.dispose();
+    lastnameController.dispose();
     emailController.dispose();
-    phoneController.dispose();
+    firstnameFocusNode.dispose();
+    lastnameFocusNode.dispose();
     emailFocusNode.dispose();
   }
 }
