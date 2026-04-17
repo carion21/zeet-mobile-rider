@@ -1,101 +1,82 @@
 // lib/screens/notifications/index.dart
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter/material.dart';
-import 'package:rider/core/constants/colors.dart';
-import 'package:rider/core/constants/sizes.dart';
-import 'package:rider/core/constants/icons.dart';
-import 'package:rider/services/navigation_service.dart';
-import 'package:rider/models/notification_model.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
+import 'package:rider/core/constants/colors.dart';
+import 'package:rider/core/constants/icons.dart';
+import 'package:rider/core/constants/sizes.dart';
+import 'package:rider/models/notification_model.dart';
+import 'package:rider/providers/notifications_provider.dart';
+import 'package:rider/providers/connectivity_provider.dart';
+import 'package:rider/services/navigation_service.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 
-class NotificationsScreen extends StatefulWidget {
+class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
 
   @override
-  State<NotificationsScreen> createState() => _NotificationsScreenState();
+  ConsumerState<NotificationsScreen> createState() =>
+      _NotificationsScreenState();
 }
 
-class _NotificationsScreenState extends State<NotificationsScreen> {
-  // Set pour tracker les IDs des notifications expandues
-  final Set<String> _expandedNotifications = {};
+class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
+  // Set pour tracker les IDs des notifications expandees
+  final Set<int> _expandedNotifications = {};
 
-  // Exemples de notifications
-  final List<NotificationModel> _notifications = [
-    NotificationModel(
-      id: 'N001',
-      title: 'Nouvelle livraison disponible',
-      message: 'Une nouvelle commande est disponible à Cocody. 1500 F',
-      type: 'new_delivery',
-      createdAt: DateTime.now().subtract(const Duration(minutes: 5)),
-      isRead: false,
-      data: {'deliveryId': 'DLV001'},
-    ),
-    NotificationModel(
-      id: 'N002',
-      title: 'Paiement reçu',
-      message: 'Vous avez reçu 15750 F pour les livraisons d\'aujourd\'hui',
-      type: 'payment',
-      createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-      isRead: false,
-    ),
-    NotificationModel(
-      id: 'N003',
-      title: 'Livraison terminée',
-      message: 'La livraison #DLV002 a été marquée comme terminée',
-      type: 'delivery_update',
-      createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-      isRead: true,
-    ),
-    NotificationModel(
-      id: 'N004',
-      title: 'Rappel',
-      message: 'N\'oubliez pas de mettre à jour votre disponibilité',
-      type: 'info',
-      createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      isRead: true,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    // Charger les notifications + le badge au montage de l'ecran.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(notificationsListProvider.notifier).load();
+      ref.read(unreadCountProvider.notifier).refresh();
+    });
+  }
 
-  int get _unreadCount => _notifications.where((n) => !n.isRead).length;
-
-  void _toggleExpand(String id) {
+  Future<void> _toggleExpand(NotificationModel notification) async {
+    final id = notification.id;
+    final wasExpanded = _expandedNotifications.contains(id);
     setState(() {
-      if (_expandedNotifications.contains(id)) {
+      if (wasExpanded) {
         _expandedNotifications.remove(id);
       } else {
         _expandedNotifications.add(id);
-        // Marquer comme lu lors de l'expansion
-        _markAsRead(id);
       }
     });
-  }
 
-  void _markAsRead(String id) {
-    final index = _notifications.indexWhere((n) => n.id == id);
-    if (index != -1 && !_notifications[index].isRead) {
-      setState(() {
-        _notifications[index] = _notifications[index].copyWith(isRead: true);
-      });
+    // Marquer comme lue + ack a l'ouverture (stoppe la cascade cote backend).
+    if (!wasExpanded && !notification.isRead) {
+      await ref
+          .read(notificationsListProvider.notifier)
+          .acknowledge(id);
     }
   }
 
-  void _markAllAsRead() {
-    setState(() {
-      for (var i = 0; i < _notifications.length; i++) {
-        _notifications[i] = _notifications[i].copyWith(isRead: true);
-      }
-    });
+  Future<void> _markAllAsRead() async {
+    await ref.read(notificationsListProvider.notifier).markAllAsRead();
+  }
+
+  Future<void> _refresh() async {
+    await ref.read(notificationsListProvider.notifier).refresh();
   }
 
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDarkMode ? AppColors.darkText : AppColors.text;
-    final textLightColor = isDarkMode ? AppColors.darkTextLight : AppColors.textLight;
-    final backgroundColor = isDarkMode ? AppColors.darkBackground : Colors.white;
+    final textLightColor =
+        isDarkMode ? AppColors.darkTextLight : AppColors.textLight;
+    final backgroundColor =
+        isDarkMode ? AppColors.darkBackground : Colors.white;
     final surfaceColor = isDarkMode ? AppColors.darkSurface : Colors.white;
 
     AppSizes().initialize(context);
+
+    final listState = ref.watch(notificationsListProvider);
+    final unreadState = ref.watch(unreadCountProvider);
+    final notifications = listState.items;
+    final unreadCount = unreadState.count;
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -115,9 +96,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
         ),
         actions: [
-          if (_unreadCount > 0)
+          if (unreadCount > 0)
             TextButton(
-              onPressed: _markAllAsRead,
+              onPressed: listState.isOperating ? null : _markAllAsRead,
               child: Text(
                 'Tout marquer comme lu',
                 style: TextStyle(
@@ -129,63 +110,75 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ),
         ],
       ),
-      body: _notifications.isEmpty
-          ? _buildEmptyState(textColor, textLightColor)
-          : ListView.builder(
-              padding: EdgeInsets.all(AppSizes().paddingLarge),
-              itemCount: _notifications.length,
-              itemBuilder: (context, index) {
-                final notification = _notifications[index];
-                return _buildNotificationCard(
-                  notification,
-                  surfaceColor,
-                  textColor,
-                  textLightColor,
-                  isDarkMode,
-                );
-              },
-            ),
+      body: RefreshIndicator(
+        onRefresh: _refresh,
+        color: AppColors.primary,
+        child: _buildBody(
+          listState,
+          notifications,
+          surfaceColor,
+          textColor,
+          textLightColor,
+          isDarkMode,
+        ),
+      ),
     );
   }
 
-  Widget _buildEmptyState(Color textColor, Color textLightColor) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              shape: BoxShape.circle,
-            ),
-            child: IconManager.getIcon(
-              'notifications',
-              color: Colors.grey.shade400,
-              size: 52,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Aucune notification',
-            style: TextStyle(
-              color: textColor,
-              fontSize: 18.sp,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Vous n\'avez aucune notification pour le moment',
-            style: TextStyle(
-              color: textLightColor,
-              fontSize: 14.sp,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+  Widget _buildBody(
+    NotificationsListState state,
+    List<NotificationModel> notifications,
+    Color surfaceColor,
+    Color textColor,
+    Color textLightColor,
+    bool isDarkMode,
+  ) {
+    final bool isOnline = ref
+        .watch(connectivityStatusProvider)
+        .maybeWhen(data: (v) => v, orElse: () => true);
+
+    return ZeetScreenScaffold(
+      state: _resolveState(state, notifications, isOnline),
+      onRetry: _refresh,
+      emptyTitle: 'Pas de notification',
+      emptySubtitle: "On te préviendra dès qu'il y a du nouveau",
+      emptyIcon: Icons.notifications_none_outlined,
+      errorMessage: state.errorMessage,
+      child: ListView.builder(
+        padding: EdgeInsets.all(AppSizes().paddingLarge),
+        itemCount: notifications.length,
+        itemBuilder: (context, index) {
+          final notification = notifications[index];
+          return _buildNotificationCard(
+            notification,
+            surfaceColor,
+            textColor,
+            textLightColor,
+            isDarkMode,
+          );
+        },
       ),
     );
+  }
+
+  ZeetScreenState _resolveState(
+    NotificationsListState state,
+    List<NotificationModel> notifications,
+    bool isOnline,
+  ) {
+    if (state.isLoading && notifications.isEmpty) {
+      return ZeetScreenState.loading;
+    }
+    if (!isOnline && notifications.isEmpty) {
+      return ZeetScreenState.offline;
+    }
+    if (state.errorMessage != null && notifications.isEmpty) {
+      return ZeetScreenState.error;
+    }
+    if (notifications.isEmpty) {
+      return ZeetScreenState.empty;
+    }
+    return ZeetScreenState.content;
   }
 
   Widget _buildNotificationCard(
@@ -197,20 +190,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   ) {
     final isExpanded = _expandedNotifications.contains(notification.id);
 
-    // Déterminer l'icône et la couleur selon le type
+    // Determiner l'icone et la couleur selon le type
     String iconName;
     Color iconColor;
 
     switch (notification.type) {
       case 'new_delivery':
+      case 'mission_assigned':
+      case 'delivery_assigned':
         iconName = 'delivery';
         iconColor = AppColors.primary;
         break;
       case 'delivery_update':
+      case 'mission_update':
         iconName = 'info';
         iconColor = const Color(0xFF2196F3);
         break;
       case 'payment':
+      case 'earnings':
         iconName = 'wallet';
         iconColor = const Color(0xFF4CD964);
         break;
@@ -241,7 +238,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () => _toggleExpand(notification.id),
+            onTap: () => _toggleExpand(notification),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeInOut,
@@ -256,7 +253,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Icône avec animation de scale subtile
+                        // Icone
                         AnimatedScale(
                           scale: isExpanded ? 1.02 : 1.0,
                           duration: const Duration(milliseconds: 300),
@@ -286,7 +283,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      notification.title,
+                                      notification.title ??
+                                          'Notification',
                                       style: TextStyle(
                                         color: textColor,
                                         fontSize: 15.sp,
@@ -302,7 +300,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                     Container(
                                       width: 8,
                                       height: 8,
-                                      decoration: BoxDecoration(
+                                      decoration: const BoxDecoration(
                                         color: AppColors.primary,
                                         shape: BoxShape.circle,
                                       ),
@@ -318,7 +316,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                   height: 1.4,
                                 ),
                                 maxLines: isExpanded ? null : 2,
-                                overflow: isExpanded ? null : TextOverflow.ellipsis,
+                                overflow: isExpanded
+                                    ? null
+                                    : TextOverflow.ellipsis,
                               ),
                             ],
                           ),
@@ -340,25 +340,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ),
                   ),
 
-                  // Partie expandable avec animation
+                  // Partie expandable
                   AnimatedCrossFade(
                     firstChild: const SizedBox.shrink(),
                     secondChild: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SizedBox(height: 12),
-
-                        // Divider
                         Container(
                           height: 1,
                           color: isDarkMode
                               ? Colors.white.withValues(alpha: 0.1)
                               : Colors.grey.withValues(alpha: 0.15),
                         ),
-
                         const SizedBox(height: 12),
-
-                        // Informations supplémentaires
                         Row(
                           children: [
                             IconManager.getIcon(
@@ -395,9 +390,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             ),
                           ],
                         ),
-
-                        // Bouton d'action si applicable
-                        if (notification.type == 'new_delivery' && notification.data != null)
+                        if ((notification.type == 'new_delivery' ||
+                                notification.type == 'mission_assigned' ||
+                                notification.type == 'delivery_assigned') &&
+                            notification.data != null)
                           Column(
                             children: [
                               const SizedBox(height: 12),
@@ -405,13 +401,26 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                 width: double.infinity,
                                 child: ElevatedButton(
                                   onPressed: () {
-                                    // TODO: Navigation vers la livraison
+                                    // Navigation vers le détail de mission
+                                    // (quickwin vague 3 §QW4). On extrait le
+                                    // mission_id du payload `data` de la notif.
+                                    final data = notification.data;
+                                    final missionId = data?['mission_id']?.toString() ??
+                                        data?['missionId']?.toString() ??
+                                        data?['delivery_id']?.toString() ??
+                                        data?['deliveryId']?.toString() ??
+                                        data?['order_id']?.toString() ??
+                                        data?['orderId']?.toString();
+                                    if (missionId != null && missionId.isNotEmpty) {
+                                      Routes.pushMissionDetails(missionId: missionId);
+                                    }
                                   },
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: iconColor,
                                     foregroundColor: Colors.white,
                                     elevation: 0,
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 12),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(10),
                                     ),
@@ -444,13 +453,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
-  String _getTypeLabel(String type) {
+  String _getTypeLabel(String? type) {
     switch (type) {
       case 'new_delivery':
+      case 'mission_assigned':
+      case 'delivery_assigned':
         return 'Nouvelle';
       case 'delivery_update':
-        return 'Mise à jour';
+      case 'mission_update':
+        return 'Mise a jour';
       case 'payment':
+      case 'earnings':
         return 'Paiement';
       case 'info':
       default:
@@ -469,7 +482,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } else if (difference.inDays < 7) {
       return 'Il y a ${difference.inDays}j';
     } else {
-      return DateFormat('dd/MM/yyyy à HH:mm').format(dateTime);
+      return DateFormat('dd/MM/yyyy a HH:mm').format(dateTime);
     }
   }
 }
