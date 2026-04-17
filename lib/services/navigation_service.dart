@@ -13,6 +13,7 @@ import 'package:rider/screens/settings/index.dart';
 import 'package:rider/screens/support/index.dart';
 import 'package:rider/screens/deliveries_history/index.dart';
 import 'package:rider/screens/availability_log/index.dart';
+import 'package:rider/screens/ratings/index.dart';
 import 'package:rider/models/delivery_model.dart';
 import 'package:zeet_ui/zeet_ui.dart';
 
@@ -42,6 +43,7 @@ class Routes {
   static const String support = '/support';
   static const String deliveriesHistory = '/deliveries-history';
   static const String availabilityLog = '/availability-log';
+  static const String ratings = '/ratings';
 
   // Définition des constructeurs de widgets pour chaque route
   static final Map<String, WidgetBuilder> routes = {
@@ -56,6 +58,7 @@ class Routes {
     support: (context) => const SupportScreen(),
     deliveriesHistory: (context) => const DeliveriesHistoryScreen(),
     availabilityLog: (context) => const AvailabilityLogScreen(),
+    ratings: (context) => const RatingsScreen(),
   };
 
   // ─── Helpers ZeetPageRoute ────────────────────────────────────────

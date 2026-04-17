@@ -1,17 +1,24 @@
 // lib/screens/home/index.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/sizes.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:rider/core/constants/assets.dart';
-import 'package:rider/core/widgets/toastification.dart';
+import 'package:rider/services/incoming_delivery_dispatcher.dart';
 import 'package:rider/services/navigation_service.dart';
 import 'package:rider/providers/status_provider.dart';
 import 'package:rider/providers/auth_provider.dart';
-import 'package:rider/models/delivery_model.dart';
+import 'package:rider/providers/connectivity_provider.dart';
+import 'package:rider/providers/earnings_provider.dart';
+import 'package:rider/providers/mission_provider.dart';
+import 'package:rider/providers/notifications_provider.dart';
+import 'package:rider/models/mission_model.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -21,21 +28,20 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  // Gains du jour en FCFA
-  final double _dailyEarnings = 15750.0;
-
-  // Notifications non lues
-  final int _unreadNotifications = 2;
-
-  // Livraisons en attente
-  int get _pendingDeliveries => _activeDeliveries.where((d) => d.status == 'new').length;
+  // Notifications non lues — lues depuis le provider (audit quickwin §QW2).
+  // L'ancienne valeur hardcodée (`= 2`) a été retirée.
 
   @override
   void initState() {
     super.initState();
-    // Charger le statut du rider au demarrage
+    // Charger le statut du rider + gains du jour + missions + unread count
+    // au demarrage. Les gains et les deliveries étaient précédemment
+    // hardcodés (audit rider 2026-04-15 §3, quickwin vague 2 §QW2).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initStatus();
+      ref.read(earningsSummaryProvider.notifier).load(period: 'today');
+      ref.read(missionsListProvider.notifier).load();
+      ref.read(unreadCountProvider.notifier).refresh();
     });
   }
 
@@ -49,44 +55,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ref.read(statusProvider.notifier).loadStatus();
   }
 
-  // Exemples de livraisons en cours
-  // TODO: Remplacer par les missions depuis missionProvider (BLOC 2)
-  final List<Delivery> _activeDeliveries = [
-    Delivery(
-      id: 'DLV001',
-      customerName: 'Kouadio Aya',
-      customerPhone: '+225 0707070701',
-      restaurantName: 'Chez Maman',
-      pickupAddress: 'Cocody, Angré 7ème Tranche',
-      deliveryAddress: 'Cocody, Riviera Palmeraie',
-      status: 'accepted',
-      distance: 3.2,
-      estimatedTime: 25,
-      deliveryFee: 1500,
-      orderDetails: '2 articles',
-      createdAt: DateTime.now().subtract(const Duration(minutes: 5)),
-    ),
-    Delivery(
-      id: 'DLV002',
-      customerName: 'Yao Jean',
-      customerPhone: '+225 0505050502',
-      restaurantName: 'Le Bistro Gourmand',
-      pickupAddress: 'Plateau, Rue du Commerce',
-      deliveryAddress: 'Marcory, Zone 4',
-      status: 'picked_up',
-      distance: 5.8,
-      estimatedTime: 35,
-      deliveryFee: 2000,
-      orderDetails: '3 articles',
-      createdAt: DateTime.now().subtract(const Duration(minutes: 15)),
-    ),
-  ];
+  // Livraisons en cours — branchées sur `ongoingMissionsProvider`.
+  // (quickwin vague 2 §QW2, finition vague 2 — refactor `_buildDeliveryCard`).
+  //
+  // La liste réelle est lue directement depuis le provider dans `build`
+  // via `ref.watch(ongoingMissionsProvider)`. La section gère les états :
+  //   - loading : spinner pendant le 1er fetch,
+  //   - error   : message + bouton retry,
+  //   - empty   : "Aucune livraison" (déjà existant),
+  //   - data    : cards Mission.
 
   @override
   Widget build(BuildContext context) {
     // Watch providers so that build() re-runs when they change
     ref.watch(isOnlineProvider);
     ref.watch(currentRiderProvider);
+    // Gains du jour — lus depuis le provider (valeur mockée retirée).
+    final earningsState = ref.watch(earningsSummaryProvider);
+    final double dailyEarnings = earningsState.summary?.totalEarnings ?? 0;
+
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDarkMode ? AppColors.darkText : AppColors.text;
     final textLightColor = isDarkMode ? AppColors.darkTextLight : AppColors.textLight;
@@ -100,6 +87,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            // Bandeau hors ligne — zeet_ui ConnectivityBanner câblé sur
+            // `connectivityStatusProvider` (wrap de ZeetConnectivity /
+            // connectivity_plus depuis zeet_ui). Quickwin QW2 vague 3.
+            // `orElse: true` = on suppose online pendant la 1re émission
+            // pour éviter un flash offline au démarrage.
+            ConnectivityBanner(
+              isOnline: ref.watch(connectivityStatusProvider).maybeWhen(
+                    data: (v) => v,
+                    orElse: () => true,
+                  ),
+            ),
             // Header custom (pas d'AppBar)
             _buildHeader(textColor, textLightColor),
 
@@ -110,14 +108,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Carte de gains du jour avec image de fond
-                    _buildEarningsCard(isDarkMode),
+                    _buildEarningsCard(isDarkMode, dailyEarnings),
 
                     const SizedBox(height: 16),
 
                     // Statistiques compactes
                     Padding(
                       padding: EdgeInsets.symmetric(horizontal: AppSizes().paddingLarge),
-                      child: _buildCompactStats(textColor, textLightColor, surfaceColor, isDarkMode),
+                      child: _buildCompactStats(textColor, textLightColor, surfaceColor, isDarkMode, dailyEarnings),
                     ),
 
                     const SizedBox(height: 20),
@@ -133,11 +131,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ],
         ),
       ),
-      floatingActionButton: _activeDeliveries.isNotEmpty ? _buildDeliveriesFAB() : null,
+      floatingActionButton: ref.watch(ongoingMissionsProvider).isNotEmpty
+          ? _buildDeliveriesFAB(ref.watch(ongoingMissionsProvider).length)
+          : null,
     );
   }
 
-  Widget _buildDeliveriesFAB() {
+  Widget _buildDeliveriesFAB(int ongoingCount) {
     return FloatingActionButton(
       onPressed: () => Routes.navigateTo(Routes.deliveries),
       backgroundColor: AppColors.primary,
@@ -150,7 +150,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             color: Colors.white,
             size: 28,
           ),
-          if (_activeDeliveries.isNotEmpty)
+          if (ongoingCount > 0)
             Positioned(
               right: -6,
               top: -6,
@@ -173,7 +173,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
                 child: Center(
                   child: Text(
-                    '${_activeDeliveries.length}',
+                    '$ongoingCount',
                     style: TextStyle(
                       color: AppColors.primary,
                       fontSize: 11.sp,
@@ -205,6 +205,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   // Avatar à gauche
                   _buildAvatarWithEarnings(textColor, textLightColor),
 
+                  // Actions a droite : (dev) test incoming delivery + notif
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                  // Dev-only : declenche l'ecran "nouvelle livraison" avec un
+                  // payload bidon. Masque en release.
+                  if (kDebugMode)
+                    IconButton(
+                      tooltip: 'Tester nouvelle livraison (dev)',
+                      onPressed: () =>
+                          IncomingDeliveryDispatcher.triggerDev(ref),
+                      icon: Icon(
+                        Icons.flash_on_rounded,
+                        color: AppColors.primary,
+                        size: 24.r,
+                      ),
+                    ),
                   // Icône de notification à droite
                   IconButton(
                     onPressed: () => Routes.navigateTo(Routes.notifications),
@@ -216,7 +233,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           color: textColor,
                           size: 26,
                         ),
-                        if (_unreadNotifications > 0)
+                        if (ref.watch(unreadCountProvider).count > 0)
                           Positioned(
                             right: -2,
                             top: -2,
@@ -232,7 +249,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               ),
                               child: Center(
                                 child: Text(
-                                  '$_unreadNotifications',
+                                  '${ref.watch(unreadCountProvider).count}',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 10.sp,
@@ -245,10 +262,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ],
                     ),
                   ),
+                    ],
+                  ),
                 ],
               ),
 
-              // Statut centré (parfaitement centré)
+              // Statut centré (parfaitement centré). Transition fade+slide
+              // via ZeetStateSwitcher quand on bascule online/offline.
               Center(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -261,27 +281,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 7,
-                          height: 7,
-                          decoration: BoxDecoration(
-                            color: ref.read(isOnlineProvider) ? const Color(0xFF4CD964) : Colors.grey,
-                            shape: BoxShape.circle,
+                    Builder(
+                      builder: (context) {
+                        final bool isOnline = ref.watch(isOnlineProvider);
+                        return ZeetStateSwitcher(
+                          stateKey: isOnline,
+                          child: Row(
+                            key: ValueKey<bool>(isOnline),
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 7,
+                                height: 7,
+                                decoration: BoxDecoration(
+                                  color: isOnline ? const Color(0xFF4CD964) : Colors.grey,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                isOnline ? 'En ligne' : 'Hors ligne',
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14.sp,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          ref.read(isOnlineProvider) ? 'En ligne' : 'Hors ligne',
-                          style: TextStyle(
-                            color: textColor,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14.sp,
-                          ),
-                        ),
-                      ],
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -317,7 +346,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildEarningsCard(bool isDarkMode) {
+  Widget _buildEarningsCard(bool isDarkMode, double dailyEarnings) {
     final walletBackground = isDarkMode ? AppAssets.darkWallet : AppAssets.lightWallet;
 
     return Container(
@@ -351,8 +380,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    '${_dailyEarnings.toStringAsFixed(0)} F',
+                  ZeetMoney(
+                    amount: dailyEarnings,
+                    currency: ZeetCurrency.fcfa,
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 32.sp,
@@ -381,7 +411,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildCompactStats(Color textColor, Color textLightColor, Color surfaceColor, bool isDarkMode) {
+  Widget _buildCompactStats(Color textColor, Color textLightColor, Color surfaceColor, bool isDarkMode, double dailyEarnings) {
     return InkWell(
       onTap: () => Routes.navigateTo(Routes.stats),
       borderRadius: BorderRadius.circular(16),
@@ -422,7 +452,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      '$_pendingDeliveries',
+                      '${ref.watch(ongoingMissionsProvider).length}',
                       style: TextStyle(
                         color: textColor,
                         fontSize: 20.sp,
@@ -469,8 +499,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       size: 18,
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      '4100 F',
+                    ZeetMoney(
+                      amount: dailyEarnings,
+                      currency: ZeetCurrency.fcfa,
                       style: TextStyle(
                         color: textColor,
                         fontSize: 20.sp,
@@ -489,6 +520,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildDeliveriesSection(Color textColor, Color textLightColor, Color surfaceColor) {
+    // Lecture du provider : on utilise le state complet pour connaitre
+    // loading/error et on re-filtre via la methode `ongoing` du state.
+    final missionsState = ref.watch(missionsListProvider);
+    final ongoing = missionsState.ongoing;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -525,81 +561,144 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
         const SizedBox(height: 16),
 
-        // Liste des livraisons
-        _activeDeliveries.isEmpty
-            ? Padding(
-                padding: EdgeInsets.symmetric(horizontal: AppSizes().paddingLarge),
-                child: Container(
-                  padding: const EdgeInsets.all(48),
-                  decoration: BoxDecoration(
-                    color: surfaceColor,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white.withValues(alpha: 0.1)
-                          : Colors.grey.withValues(alpha: 0.15),
-                      width: 1,
-                    ),
-                  ),
-                  child: Center(
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(32),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconManager.getIcon(
-                            'delivery',
-                            color: Colors.grey.shade400,
-                            size: 52,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          'Aucune livraison',
-                          style: TextStyle(
-                            color: textColor,
-                            fontSize: 18.sp,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          ref.read(isOnlineProvider)
-                              ? 'Les nouvelles commandes\napparaîtront ici'
-                              : 'Mettez-vous en ligne\npour recevoir des livraisons',
-                          style: TextStyle(
-                            color: textLightColor,
-                            fontSize: 14.sp,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              )
-            : Padding(
-                padding: EdgeInsets.symmetric(horizontal: AppSizes().paddingLarge),
-                child: Column(
-                  children: _activeDeliveries.take(2).map((delivery) {
-                    return _buildDeliveryCard(delivery, textColor, textLightColor, surfaceColor);
-                  }).toList(),
+        // États : loading / error / empty / data
+        if (missionsState.isLoading && ongoing.isEmpty)
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSizes().paddingLarge),
+            child: Container(
+              padding: const EdgeInsets.all(48),
+              decoration: BoxDecoration(
+                color: surfaceColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.grey.withValues(alpha: 0.15),
+                  width: 1,
                 ),
               ),
+              child: const Center(child: CircularProgressIndicator()),
+            ),
+          )
+        else if (missionsState.errorMessage != null && ongoing.isEmpty)
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSizes().paddingLarge),
+            child: Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: surfaceColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.grey.withValues(alpha: 0.15),
+                  width: 1,
+                ),
+              ),
+              child: Center(
+                child: Column(
+                  children: [
+                    IconManager.getIcon(
+                      'warning',
+                      color: Colors.redAccent,
+                      size: 40,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      missionsState.errorMessage!,
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 14.sp,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: () =>
+                          ref.read(missionsListProvider.notifier).refresh(),
+                      child: const Text('Reessayer'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else if (ongoing.isEmpty)
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSizes().paddingLarge),
+            child: Container(
+              padding: const EdgeInsets.all(48),
+              decoration: BoxDecoration(
+                color: surfaceColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.grey.withValues(alpha: 0.15),
+                  width: 1,
+                ),
+              ),
+              child: Center(
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(32),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: IconManager.getIcon(
+                        'delivery',
+                        color: Colors.grey.shade400,
+                        size: 52,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Aucune livraison',
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 18.sp,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      ref.watch(isOnlineProvider)
+                          ? 'Les nouvelles commandes\napparaîtront ici'
+                          : 'Mettez-vous en ligne\npour recevoir des livraisons',
+                      style: TextStyle(
+                        color: textLightColor,
+                        fontSize: 14.sp,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSizes().paddingLarge),
+            child: Column(
+              children: ongoing.take(2).map((mission) {
+                return _buildDeliveryCard(mission, textColor, textLightColor, surfaceColor);
+              }).toList(),
+            ),
+          ),
       ],
     );
   }
 
-  Widget _buildDeliveryCard(Delivery delivery, Color textColor, Color textLightColor, Color surfaceColor) {
-    // Déterminer la couleur du statut
+  Widget _buildDeliveryCard(Mission mission, Color textColor, Color textLightColor, Color surfaceColor) {
+    // Déterminer la couleur du statut (aligné sur MissionsListState.ongoing)
     Color statusColor;
     String statusText;
 
-    switch (delivery.status) {
-      case 'new':
+    switch (mission.status) {
+      case 'assigned':
+      case 'pending':
         statusColor = const Color(0xFFFFA500); // Orange
         statusText = 'Nouvelle';
         break;
@@ -607,9 +706,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         statusColor = const Color(0xFF2196F3); // Bleu
         statusText = 'Acceptée';
         break;
+      case 'collecting':
+        statusColor = const Color(0xFF9C27B0); // Violet
+        statusText = 'En collecte';
+        break;
+      case 'collected':
       case 'picked_up':
         statusColor = AppColors.primary; // Orange
         statusText = 'Récupérée';
+        break;
+      case 'delivering':
+        statusColor = const Color(0xFF2196F3);
+        statusText = 'En livraison';
         break;
       case 'delivered':
         statusColor = const Color(0xFF4CD964); // Vert
@@ -617,7 +725,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         break;
       default:
         statusColor = Colors.grey;
-        statusText = delivery.status;
+        statusText = mission.status ?? '—';
     }
 
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -636,7 +744,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
       child: InkWell(
         onTap: () {
-          Routes.pushDeliveryDetails(delivery: delivery);
+          HapticFeedback.selectionClick();
+          Routes.pushMissionDetails(missionId: mission.id.toString());
         },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
@@ -644,12 +753,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // En-tête avec ID et statut
+              // En-tête avec reference et statut
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '#${delivery.id}',
+                    mission.orderReference,
                     style: TextStyle(
                       color: textColor,
                       fontSize: 16.sp,
@@ -687,7 +796,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      delivery.restaurantName,
+                      mission.partnerName,
                       style: TextStyle(
                         color: textColor,
                         fontSize: 14.sp,
@@ -711,7 +820,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      delivery.customerName,
+                      mission.customerName,
                       style: TextStyle(
                         color: textColor,
                         fontSize: 13.sp,
@@ -734,7 +843,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      delivery.deliveryAddress,
+                      mission.dropoffAddressDisplay,
                       style: TextStyle(
                         color: textLightColor,
                         fontSize: 13.sp,
@@ -751,20 +860,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               // Infos bas (distance, temps, frais)
               Row(
                 children: [
-                  _buildSmallBadge(
-                    'location_on',
-                    '${delivery.distance} km',
-                    const Color(0xFF4CD964),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildSmallBadge(
-                    'access_time',
-                    '${delivery.estimatedTime} min',
-                    const Color(0xFFFF6B6B),
-                  ),
+                  if (mission.distance != null)
+                    _buildSmallBadge(
+                      'location_on',
+                      '${mission.distance!.toStringAsFixed(1)} km',
+                      const Color(0xFF4CD964),
+                    ),
+                  if (mission.distance != null) const SizedBox(width: 8),
+                  if (mission.estimatedTime != null)
+                    _buildSmallBadge(
+                      'access_time',
+                      '${mission.estimatedTime} min',
+                      const Color(0xFFFF6B6B),
+                    ),
                   const Spacer(),
-                  Text(
-                    '${delivery.deliveryFee.toStringAsFixed(0)} F',
+                  ZeetMoney(
+                    amount: mission.fee,
+                    currency: ZeetCurrency.fcfa,
                     style: TextStyle(
                       color: AppColors.primary,
                       fontSize: 16.sp,
