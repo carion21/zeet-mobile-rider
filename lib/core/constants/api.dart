@@ -36,13 +36,26 @@ abstract class StatusEndpoints {
   static const String get = '/rider/status';
   static const String setOnline = '/rider/status';
   static const String updateLocation = '/rider/location';
+
+  /// GET /v1/rider/availability-log — historique des bascules online/offline.
+  /// Paginé (page, limit), filtrable (date_from, date_to).
+  static const String availabilityLog = '/rider/availability-log';
 }
 
 // ---------------------------------------------------------------------------
-// Deliveries (references / transitions)
+// Deliveries (historique + references / transitions)
 // ---------------------------------------------------------------------------
 abstract class DeliveryEndpoints {
+  /// GET /v1/rider/deliveries — historique complet paginé des livraisons
+  /// (distinct des missions actives).
+  static const String list = '/rider/deliveries';
+
   static const String transitions = '/rider/deliveries/transitions';
+
+  /// GET /v1/rider/deliveries/actions — actions canoniques cote livraisons.
+  static const String deliveriesActions = '/rider/deliveries/actions';
+
+  /// GET /v1/rider/orders/actions — legacy, cote commandes.
   static const String actions = '/rider/orders/actions';
 }
 
@@ -57,6 +70,9 @@ abstract class MissionEndpoints {
   static String collect(String id) => '/rider/missions/$id/collect';
   static String deliver(String id) => '/rider/missions/$id/deliver';
   static String notDelivered(String id) => '/rider/missions/$id/not-delivered';
+
+  /// GET /v1/rider/missions/:id/logs — audit trail d'une mission.
+  static String logs(String id) => '/rider/missions/$id/logs';
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +81,55 @@ abstract class MissionEndpoints {
 abstract class EarningsEndpoints {
   static const String summary = '/rider/earnings';
   static const String history = '/rider/earnings/history';
+}
+
+// ---------------------------------------------------------------------------
+// Profile (edit + avatar upload)
+// ---------------------------------------------------------------------------
+abstract class ProfileEndpoints {
+  /// PATCH /v1/rider/profile — update partial profile (firstname, lastname,
+  /// email, gender). Tous les champs sont optionnels cote backend.
+  static const String update = '/rider/profile';
+
+  /// POST /v1/rider/profile/photo — upload avatar (multipart/form-data, field `file`).
+  /// Max 5 MB, mime image/jpeg|png|webp.
+  static const String photo = '/rider/profile/photo';
+}
+
+// ---------------------------------------------------------------------------
+// Ratings (notes recues par le rider)
+// ---------------------------------------------------------------------------
+abstract class RatingEndpoints {
+  /// GET /v1/rider/ratings — liste paginee des notes recues avec summary
+  /// (average_rating, total_ratings).
+  static const String list = '/rider/ratings';
+}
+
+// ---------------------------------------------------------------------------
+// Stats (dashboard du rider : livraisons, taux, rating, gains)
+// ---------------------------------------------------------------------------
+abstract class StatsEndpoints {
+  /// GET /v1/rider/stats — statistiques agregees du rider sur une periode.
+  static const String summary = '/rider/stats';
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+abstract class NotificationEndpoints {
+  static const String list = '/rider/notifications';
+  static const String unreadCount = '/rider/notifications/unread-count';
+  static const String readAll = '/rider/notifications/read-all';
+  static const String preferences = '/rider/notifications/preferences';
+  static const String deviceToken = '/rider/notifications/device-token';
+  static String markAsRead(String id) => '/rider/notifications/$id/read';
+  static String acknowledge(String id) => '/rider/notifications/$id/ack';
+  /// PATCH /v1/rider/notifications/preferences/:typeId
+  /// Le paramètre correspond a l'ID du notification_type (cote backend :typeId).
+  static String updatePreference(String typeId) =>
+      '/rider/notifications/preferences/$typeId';
+  static String removeDeviceToken(String id) =>
+      '/rider/notifications/device-token/$id';
 }
 
 // ---------------------------------------------------------------------------

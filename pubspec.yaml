@@ -43,6 +43,8 @@ dependencies:
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
   http: ^1.2.2
+  http_parser: ^4.0.2
+  image_picker: ^1.1.2
   geolocator: ^13.0.2
   flutter_polyline_points: ^2.1.0
   iconsax_flutter: ^1.0.0
@@ -56,6 +58,11 @@ dependencies:
   firebase_messaging: ^16.0.1
   # Lecture sonnerie systeme en boucle sur l'ecran Incoming Delivery
   flutter_ringtone_player: ^4.0.0+3
+  # Notifications locales avec FullScreenIntent — reveille l'ecran quand
+  # l'app est en background / killed sur reception d'un push FCM (Phase 3)
+  flutter_local_notifications: ^18.0.1
+  # Lancement d'appels téléphoniques natifs (tel:) depuis les écrans mission
+  url_launcher: ^6.3.1
   zeet_ui:
     path: ../packages/zeet_ui
 

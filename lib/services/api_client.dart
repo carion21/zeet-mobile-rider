@@ -4,6 +4,7 @@ import 'package:rider/core/constants/api.dart';
 import 'package:rider/core/utils/api_logger.dart';
 import 'package:rider/services/token_service.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 
 /// Exception personnalisee pour les erreurs API.
 class ApiException implements Exception {
@@ -97,7 +98,7 @@ class ApiClient {
     try {
       final response = await _httpClient.get(url, headers: headers).timeout(_defaultTimeout);
       stopwatch.stop();
-      return _handleResponse('GET', url.toString(), response, stopwatch.elapsed);
+      return _handleResponse('GET', url.toString(), response, stopwatch.elapsed, null);
     } catch (e, st) {
       stopwatch.stop();
       ApiLogger.logError(method: 'GET', url: url.toString(), error: e, stackTrace: st);
@@ -121,10 +122,16 @@ class ApiClient {
     try {
       final response = await _httpClient.post(url, headers: headers, body: encodedBody).timeout(_defaultTimeout);
       stopwatch.stop();
-      return _handleResponse('POST', url.toString(), response, stopwatch.elapsed);
+      return _handleResponse('POST', url.toString(), response, stopwatch.elapsed, encodedBody);
     } catch (e, st) {
       stopwatch.stop();
-      ApiLogger.logError(method: 'POST', url: url.toString(), error: e, stackTrace: st);
+      ApiLogger.logError(
+        method: 'POST',
+        url: url.toString(),
+        error: e,
+        stackTrace: st,
+        requestBody: encodedBody,
+      );
       rethrow;
     }
   }
@@ -145,10 +152,16 @@ class ApiClient {
     try {
       final response = await _httpClient.put(url, headers: headers, body: encodedBody).timeout(_defaultTimeout);
       stopwatch.stop();
-      return _handleResponse('PUT', url.toString(), response, stopwatch.elapsed);
+      return _handleResponse('PUT', url.toString(), response, stopwatch.elapsed, encodedBody);
     } catch (e, st) {
       stopwatch.stop();
-      ApiLogger.logError(method: 'PUT', url: url.toString(), error: e, stackTrace: st);
+      ApiLogger.logError(
+        method: 'PUT',
+        url: url.toString(),
+        error: e,
+        stackTrace: st,
+        requestBody: encodedBody,
+      );
       rethrow;
     }
   }
@@ -169,11 +182,95 @@ class ApiClient {
     try {
       final response = await _httpClient.patch(url, headers: headers, body: encodedBody).timeout(_defaultTimeout);
       stopwatch.stop();
-      return _handleResponse('PATCH', url.toString(), response, stopwatch.elapsed);
+      return _handleResponse('PATCH', url.toString(), response, stopwatch.elapsed, encodedBody);
     } catch (e, st) {
       stopwatch.stop();
-      ApiLogger.logError(method: 'PATCH', url: url.toString(), error: e, stackTrace: st);
+      ApiLogger.logError(
+        method: 'PATCH',
+        url: url.toString(),
+        error: e,
+        stackTrace: st,
+        requestBody: encodedBody,
+      );
       rethrow;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // POST multipart/form-data (upload de fichier)
+  // ---------------------------------------------------------------------------
+  /// POST multipart request — utilise pour uploader un fichier (ex: avatar).
+  ///
+  /// [filePath] : chemin local du fichier a uploader.
+  /// [fieldName] : nom du champ attendu par le backend (ex: "file").
+  /// [fields] : champs additionnels (optionnels) envoyes dans le meme form.
+  /// [contentType] : mime optionnel (ex: "image/jpeg"). Si null, inference auto.
+  Future<Map<String, dynamic>> postMultipartFile(
+    String endpoint, {
+    required String filePath,
+    required String fieldName,
+    Map<String, String>? fields,
+    String? contentType,
+    bool withAuth = true,
+  }) async {
+    final url = _buildUrl(endpoint);
+    final headers = await _buildHeaders(withAuth: withAuth);
+    // On laisse http construire le content-type multipart boundary.
+    headers.remove(HttpHeaders.contentTypeHeader);
+
+    ApiLogger.logRequest(
+      method: 'POST[multipart]',
+      url: url.toString(),
+      headers: headers,
+      body: '{"field":"$fieldName","file":"$filePath"}',
+    );
+    final stopwatch = Stopwatch()..start();
+
+    try {
+      final request = http.MultipartRequest('POST', url);
+      request.headers.addAll(headers);
+      if (fields != null && fields.isNotEmpty) {
+        request.fields.addAll(fields);
+      }
+
+      final multipartFile = await http.MultipartFile.fromPath(
+        fieldName,
+        filePath,
+        contentType: contentType != null ? _parseMediaType(contentType) : null,
+      );
+      request.files.add(multipartFile);
+
+      final streamed = await request.send().timeout(_defaultTimeout);
+      final response = await http.Response.fromStream(streamed);
+      stopwatch.stop();
+
+      return _handleResponse(
+        'POST[multipart]',
+        url.toString(),
+        response,
+        stopwatch.elapsed,
+        '{"multipart":"$fieldName"}',
+      );
+    } catch (e, st) {
+      stopwatch.stop();
+      ApiLogger.logError(
+        method: 'POST[multipart]',
+        url: url.toString(),
+        error: e,
+        stackTrace: st,
+      );
+      rethrow;
+    }
+  }
+
+  /// Parse "image/jpeg" -> MediaType('image', 'jpeg').
+  MediaType? _parseMediaType(String value) {
+    final parts = value.split('/');
+    if (parts.length != 2) return null;
+    try {
+      return MediaType(parts[0], parts[1]);
+    } catch (_) {
+      return null;
     }
   }
 
@@ -191,7 +288,7 @@ class ApiClient {
     try {
       final response = await _httpClient.delete(url, headers: headers).timeout(_defaultTimeout);
       stopwatch.stop();
-      return _handleResponse('DELETE', url.toString(), response, stopwatch.elapsed);
+      return _handleResponse('DELETE', url.toString(), response, stopwatch.elapsed, null);
     } catch (e, st) {
       stopwatch.stop();
       ApiLogger.logError(method: 'DELETE', url: url.toString(), error: e, stackTrace: st);
@@ -208,6 +305,7 @@ class ApiClient {
     String url,
     http.Response response,
     Duration duration,
+    String? requestBody,
   ) async {
     final body = response.body.isNotEmpty ? jsonDecode(response.body) as Map<String, dynamic> : <String, dynamic>{};
 
@@ -233,14 +331,25 @@ class ApiClient {
       }
     }
 
-    // Erreur
+    final message = body['message'] is String
+        ? body['message'] as String
+        : body['message'] is List
+            ? (body['message'] as List).join(', ')
+            : 'Une erreur est survenue';
+
+    // Log consolide avec input + reponse pour faciliter le debug
+    ApiLogger.logError(
+      method: method,
+      url: url,
+      error: 'HTTP ${response.statusCode}: $message',
+      statusCode: response.statusCode,
+      requestBody: requestBody,
+      responseBody: body,
+    );
+
     throw ApiException(
       statusCode: response.statusCode,
-      message: body['message'] is String
-          ? body['message'] as String
-          : body['message'] is List
-              ? (body['message'] as List).join(', ')
-              : 'Une erreur est survenue',
+      message: message,
       errors: body['errors'] as Map<String, dynamic>?,
     );
   }

@@ -100,6 +100,7 @@ class IconManager {
     'language': Icons.language,
     'document': Icons.description,
     'privacy': Icons.privacy_tip,
+    'chart': Icons.bar_chart_outlined,
   };
 
   // Icônes Cupertino pour iOS
@@ -199,6 +200,7 @@ class IconManager {
     'language': CupertinoIcons.globe,
     'document': CupertinoIcons.doc_text,
     'privacy': CupertinoIcons.lock_shield,
+    'chart': CupertinoIcons.chart_bar,
   };
 
   static Icon getIcon(String iconName, {Color? color, double? size}) {
