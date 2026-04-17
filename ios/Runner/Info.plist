@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Rider</string>
+	<string>Zeet Rider</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -45,5 +45,15 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Zeet Rider a besoin d'acces a votre camera pour prendre votre photo de profil.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Zeet Rider a besoin d'acces a votre galerie pour choisir votre photo de profil.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Zeet Rider a besoin d'acces a votre galerie pour sauvegarder des images.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>tel</string>
+	</array>
 </dict>
 </plist>
