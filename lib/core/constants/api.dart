@@ -50,13 +50,8 @@ abstract class DeliveryEndpoints {
   /// (distinct des missions actives).
   static const String list = '/rider/deliveries';
 
-  static const String transitions = '/rider/deliveries/transitions';
-
   /// GET /v1/rider/deliveries/actions — actions canoniques cote livraisons.
   static const String deliveriesActions = '/rider/deliveries/actions';
-
-  /// GET /v1/rider/orders/actions — legacy, cote commandes.
-  static const String actions = '/rider/orders/actions';
 }
 
 // ---------------------------------------------------------------------------

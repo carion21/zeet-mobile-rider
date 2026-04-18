@@ -3,8 +3,7 @@ import 'package:rider/models/mission_log_model.dart';
 import 'package:rider/services/api_client.dart';
 
 /// Service pour les missions de livraison du rider.
-/// Encapsule les appels aux endpoints `/v1/rider/missions/*`,
-/// `/v1/rider/deliveries/transitions` et `/v1/rider/orders/actions`.
+/// Encapsule les appels aux endpoints `/v1/rider/missions/*`.
 class MissionService {
   final ApiClient _apiClient;
 
@@ -122,37 +121,4 @@ class MissionService {
     return const <MissionLogEntry>[];
   }
 
-  // ---------------------------------------------------------------------------
-  // GET /v1/rider/deliveries/transitions
-  // ---------------------------------------------------------------------------
-  /// Recupere les transitions possibles pour les livraisons.
-  Future<Map<String, dynamic>> getTransitions({String? status}) async {
-    final queryParams = <String, String>{};
-    if (status != null && status.isNotEmpty) {
-      queryParams['status'] = status;
-    }
-
-    final response = await _apiClient.get(
-      DeliveryEndpoints.transitions,
-      queryParams: queryParams.isNotEmpty ? queryParams : null,
-    );
-    return response;
-  }
-
-  // ---------------------------------------------------------------------------
-  // GET /v1/rider/orders/actions
-  // ---------------------------------------------------------------------------
-  /// Recupere les actions possibles sur les commandes.
-  Future<Map<String, dynamic>> getOrderActions({String? status}) async {
-    final queryParams = <String, String>{};
-    if (status != null && status.isNotEmpty) {
-      queryParams['status'] = status;
-    }
-
-    final response = await _apiClient.get(
-      DeliveryEndpoints.actions,
-      queryParams: queryParams.isNotEmpty ? queryParams : null,
-    );
-    return response;
-  }
 }
