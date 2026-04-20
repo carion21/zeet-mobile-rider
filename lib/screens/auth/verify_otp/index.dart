@@ -7,8 +7,8 @@ import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/sizes.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:rider/core/widgets/toastification.dart';
-import 'package:rider/providers/auth_provider.dart';
 import 'package:rider/services/navigation_service.dart';
+import 'package:rider/services/permissions_service.dart';
 import 'controllers.dart';
 
 class VerifyOtpScreen extends ConsumerStatefulWidget {
@@ -89,7 +89,12 @@ class _VerifyOtpScreenState extends ConsumerState<VerifyOtpScreen> {
 
     if (result['success']) {
       AppToast.showSuccess(context: context, message: "Verification reussie !");
-      Routes.navigateAndRemoveAll(Routes.home);
+      final bool onboarded =
+          await PermissionsService.instance.isOnboarded();
+      if (!mounted) return;
+      Routes.navigateAndRemoveAll(
+        onboarded ? Routes.home : Routes.permissions,
+      );
     } else {
       AppToast.showError(
         context: context,

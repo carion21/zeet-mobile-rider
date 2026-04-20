@@ -20,9 +20,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:rider/models/incoming_delivery_payload.dart';
+import 'package:rider/models/queued_action.dart';
 import 'package:rider/services/api_client.dart';
 import 'package:rider/services/mission_service.dart';
 import 'package:rider/services/notification_service.dart';
+import 'package:rider/services/offline_queue_service.dart';
 
 /// Duree de fallback si le payload n'a pas d'accept_deadline.
 const Duration kIncomingDeliveryFallbackTimeout = Duration(seconds: 30);
@@ -191,20 +193,55 @@ class IncomingDeliveryNotifier extends StateNotifier<IncomingDeliveryState> {
       state = state.copyWith(phase: IncomingDeliveryPhase.accepted);
       return true;
     } on ApiException catch (e) {
-      debugPrint('[IncomingDelivery] accept failed: $e');
-      state = state.copyWith(
-        phase: IncomingDeliveryPhase.error,
-        errorMessage: e.message,
-      );
-      return false;
+      // Erreur métier explicite (mission déjà prise, validation, etc.)
+      // → on ne peut PAS optimistic-accepter sur 4xx hors transient.
+      if (!_isTransient(e.statusCode)) {
+        debugPrint('[IncomingDelivery] accept rejected by server: $e');
+        state = state.copyWith(
+          phase: IncomingDeliveryPhase.error,
+          errorMessage: e.message,
+        );
+        return false;
+      }
+      // 5xx / 408 / 429 → on enqueue et optimistic-accepte. Le retry
+      // depuis OfflineQueueService rattrapera dès que possible.
+      debugPrint('[IncomingDelivery] accept transient ${e.statusCode}, enqueue + optimistic');
+      await _enqueueAcceptAndOptimistic(payload);
+      return true;
     } catch (e) {
-      debugPrint('[IncomingDelivery] accept error: $e');
-      state = state.copyWith(
-        phase: IncomingDeliveryPhase.error,
-        errorMessage: 'Impossible d\'accepter la livraison',
-      );
-      return false;
+      // Erreur réseau (timeout, no network) → enqueue + optimistic.
+      // Skill `zeet-offline-first` §11 (rider parking sous-sol).
+      debugPrint('[IncomingDelivery] accept network error, enqueue + optimistic: $e');
+      await _enqueueAcceptAndOptimistic(payload);
+      return true;
     }
+  }
+
+  /// Enqueue l'acceptation pour rejeu serveur, ack la notif locale, et
+  /// passe en phase `accepted` côté UI (le rider repart sur la mission
+  /// même sans confirmation serveur immédiate).
+  Future<void> _enqueueAcceptAndOptimistic(
+    IncomingDeliveryPayload payload,
+  ) async {
+    await OfflineQueueService.instance.enqueue(
+      type: QueuedActionType.acceptMission,
+      missionId: payload.deliveryId.toString(),
+    );
+    if (payload.requiresAck && payload.notificationId > 0) {
+      try {
+        await _notificationService.acknowledge(payload.notificationId);
+      } catch (e) {
+        debugPrint('[IncomingDelivery] ack failed (non-fatal): $e');
+      }
+    }
+    state = state.copyWith(phase: IncomingDeliveryPhase.accepted);
+  }
+
+  bool _isTransient(int? code) {
+    if (code == null) return true;
+    if (code >= 500) return true;
+    if (code == 408 || code == 425 || code == 429) return true;
+    return false;
   }
 
   // ---------------------------------------------------------------------------
@@ -238,20 +275,41 @@ class IncomingDeliveryNotifier extends StateNotifier<IncomingDeliveryState> {
       state = state.copyWith(phase: IncomingDeliveryPhase.rejected);
       return true;
     } on ApiException catch (e) {
-      debugPrint('[IncomingDelivery] reject failed: $e');
-      state = state.copyWith(
-        phase: IncomingDeliveryPhase.error,
-        errorMessage: e.message,
-      );
-      return false;
+      if (!_isTransient(e.statusCode)) {
+        debugPrint('[IncomingDelivery] reject rejected by server: $e');
+        state = state.copyWith(
+          phase: IncomingDeliveryPhase.error,
+          errorMessage: e.message,
+        );
+        return false;
+      }
+      debugPrint('[IncomingDelivery] reject transient, enqueue + optimistic');
+      await _enqueueRejectAndOptimistic(payload, reason);
+      return true;
     } catch (e) {
-      debugPrint('[IncomingDelivery] reject error: $e');
-      state = state.copyWith(
-        phase: IncomingDeliveryPhase.error,
-        errorMessage: 'Impossible de refuser la livraison',
-      );
-      return false;
+      debugPrint('[IncomingDelivery] reject network error, enqueue + optimistic: $e');
+      await _enqueueRejectAndOptimistic(payload, reason);
+      return true;
     }
+  }
+
+  Future<void> _enqueueRejectAndOptimistic(
+    IncomingDeliveryPayload payload,
+    String reason,
+  ) async {
+    await OfflineQueueService.instance.enqueue(
+      type: QueuedActionType.rejectMission,
+      missionId: payload.deliveryId.toString(),
+      payload: <String, dynamic>{'reason': reason},
+    );
+    if (payload.requiresAck && payload.notificationId > 0) {
+      try {
+        await _notificationService.acknowledge(payload.notificationId);
+      } catch (e) {
+        debugPrint('[IncomingDelivery] ack failed (non-fatal): $e');
+      }
+    }
+    state = state.copyWith(phase: IncomingDeliveryPhase.rejected);
   }
 
   Future<void> _autoReject() async {

@@ -132,7 +132,7 @@ class ProfileEditNotifier extends StateNotifier<ProfileEditState> {
       );
       return {
         'success': false,
-        'message': 'Erreur lors de la sauvegarde du profil',
+        'message': 'Sauvegarde impossible. Réessaye.',
       };
     }
   }
@@ -166,11 +166,11 @@ class ProfileEditNotifier extends StateNotifier<ProfileEditState> {
     } catch (e) {
       state = state.copyWith(
         isUploadingPhoto: false,
-        errorMessage: 'Erreur lors de l\'upload',
+        errorMessage: 'Envoi impossible. Réessaye.',
       );
       return {
         'success': false,
-        'message': 'Impossible d\'envoyer la photo. Reessayez.',
+        'message': "Photo non envoyée. Réessaye.",
       };
     }
   }

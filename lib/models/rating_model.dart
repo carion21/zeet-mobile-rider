@@ -3,6 +3,7 @@
 /// Note : api-reference.json est obsolete pour cet endpoint. La structure
 /// ci-dessous est ecrite a la main depuis le contrat BACKEND_WORK_ORDER_REPORT
 /// (tache 5, 2026-04-15).
+library;
 
 /// Reference legere a une commande liee a une note.
 class RatingOrderRef {

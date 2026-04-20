@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:rider/core/widgets/toastification.dart';
+import 'package:rider/screens/settings/widgets/notification_preferences_card.dart';
 import 'package:rider/services/navigation_service.dart';
 import 'package:rider/providers/theme_provider.dart';
 
@@ -16,9 +17,8 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  bool _notificationsEnabled = true;
-  bool _soundEnabled = true;
-  bool _vibrationEnabled = true;
+  // Toggles notifs/son/vibration deplaces dans NotificationPreferencesCard
+  // (vraies preferences persistees + heures silencieuses).
   bool _locationAlwaysOn = false;
   String _language = 'Français';
   String _mapStyle = 'Standard';
@@ -101,58 +101,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
             SizedBox(height: 24.h),
 
-            // Section Notifications
+            // Section Notifications — opt-in granulaire par channel +
+            // heures silencieuses persistees. Skill `zeet-notification
+            // -strategy` §9.
             _buildSectionTitle('Notifications', textColor),
             SizedBox(height: 12.h),
-            _buildSettingsCard(
-              surfaceColor,
-              textColor,
-              textLightColor,
-              isDarkMode,
-              children: [
-                _buildSwitchOption(
-                  title: 'Notifications push',
-                  subtitle: 'Recevoir les notifications',
-                  icon: 'notifications',
-                  value: _notificationsEnabled,
-                  onChanged: (value) {
-                    setState(() => _notificationsEnabled = value);
-                    AppToast.showSuccess(
-                      context: context,
-                      message: value
-                          ? 'Notifications activées'
-                          : 'Notifications désactivées',
-                    );
-                  },
-                  textColor: textColor,
-                  textLightColor: textLightColor,
-                ),
-                Divider(height: 1, color: textLightColor.withValues(alpha: 0.1)),
-                _buildSwitchOption(
-                  title: 'Son',
-                  subtitle: 'Son des notifications',
-                  icon: 'sound',
-                  value: _soundEnabled,
-                  onChanged: (value) {
-                    setState(() => _soundEnabled = value);
-                  },
-                  textColor: textColor,
-                  textLightColor: textLightColor,
-                ),
-                Divider(height: 1, color: textLightColor.withValues(alpha: 0.1)),
-                _buildSwitchOption(
-                  title: 'Vibration',
-                  subtitle: 'Vibrer lors des notifications',
-                  icon: 'vibration',
-                  value: _vibrationEnabled,
-                  onChanged: (value) {
-                    setState(() => _vibrationEnabled = value);
-                  },
-                  textColor: textColor,
-                  textLightColor: textLightColor,
-                ),
-              ],
-            ),
+            const NotificationPreferencesCard(),
 
             SizedBox(height: 24.h),
 
@@ -420,7 +374,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: AppColors.primary,
+            activeThumbColor: AppColors.primary,
           ),
         ],
       ),

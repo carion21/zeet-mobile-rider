@@ -51,6 +51,22 @@
 	<string>Zeet Rider a besoin d'acces a votre galerie pour choisir votre photo de profil.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Zeet Rider a besoin d'acces a votre galerie pour sauvegarder des images.</string>
+	<!-- Location permissions : tracking GPS pendant les missions actives,
+	     y compris en arriere-plan (skill zeet-offline-first §11). -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Zeet Rider utilise votre position pour afficher la mission en cours et calculer l'itineraire.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Zeet Rider continue a partager votre position pendant les livraisons, meme app fermee, pour permettre au client de suivre la course.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Zeet Rider continue a partager votre position pendant les livraisons, meme app fermee, pour permettre au client de suivre la course.</string>
+	<!-- Background modes : location en mission active + fetch periodique
+	     pour la sync offline. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>tel</string>

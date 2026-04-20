@@ -3,6 +3,7 @@
 ///
 /// IMPORTANT : Parsing tres defensif. Tous les champs sont nullable sauf `id`.
 /// L'API peut renvoyer des structures variables (int ou objet pour les relations).
+library;
 
 // ---------------------------------------------------------------------------
 // Sous-objets

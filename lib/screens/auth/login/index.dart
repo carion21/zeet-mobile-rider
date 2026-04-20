@@ -76,7 +76,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final textLightColor = isDarkMode ? AppColors.darkTextLight : AppColors.textLight;
     final backgroundColor = isDarkMode ? AppColors.darkBackground : Colors.white;
     final surfaceColor = isDarkMode ? AppColors.darkSurface : Colors.white;
-    final borderColor = isDarkMode ? AppColors.darkTextLight.withOpacity(0.2) : const Color(0xFFEEEEEE);
+    final borderColor = isDarkMode ? AppColors.darkTextLight.withValues(alpha: 0.2) : const Color(0xFFEEEEEE);
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -224,7 +224,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           decoration: InputDecoration(
             hintText: hintText,
             hintStyle: TextStyle(
-              color: textLightColor.withOpacity(0.6),
+              color: textLightColor.withValues(alpha: 0.6),
               fontSize: 14.sp,
             ),
             prefixIcon: IconManager.getIcon(
@@ -309,8 +309,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: AppColors.primary.withOpacity(0.5),
-          disabledForegroundColor: Colors.white.withOpacity(0.7),
+          disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.5),
+          disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),

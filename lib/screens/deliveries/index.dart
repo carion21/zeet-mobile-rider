@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/core/constants/colors.dart';
+import 'package:rider/core/constants/mission_status.dart';
 import 'package:rider/core/constants/sizes.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:rider/services/navigation_service.dart';
@@ -10,6 +11,7 @@ import 'package:rider/providers/mission_provider.dart';
 import 'package:rider/providers/connectivity_provider.dart';
 import 'package:rider/models/mission_model.dart';
 import 'package:rider/screens/deliveries/widgets/completed_tab.dart';
+import 'package:rider/widgets/mission_status_chip.dart';
 import 'package:zeet_ui/zeet_ui.dart';
 
 class DeliveriesScreen extends ConsumerStatefulWidget {
@@ -99,21 +101,16 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen>
   }
 
   Widget _buildHeader(Color textColor) {
+    // Pas de back button : l'ecran est un onglet permanent du MainScaffold,
+    // accessible directement via la bottom nav. Le retour vers Home se fait
+    // par tap sur l'onglet Accueil (skill `zeet-3-clicks-rule`).
     return Padding(
       padding: EdgeInsets.symmetric(
-        horizontal: AppSizes().paddingMedium,
+        horizontal: AppSizes().paddingLarge,
         vertical: AppSizes().paddingSmall,
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: IconManager.getIcon(
-              'arrow_back',
-              color: textColor,
-            ),
-            onPressed: () => Routes.goBack(),
-          ),
-          const SizedBox(width: 8),
           Text(
             'Mes livraisons',
             style: TextStyle(
@@ -319,48 +316,8 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen>
     Color textLightColor,
     Color surfaceColor,
   ) {
-    // Couleur et texte du statut
-    Color statusColor;
-    String statusText;
-
-    switch (mission.status) {
-      case 'assigned':
-      case 'pending':
-        statusColor = const Color(0xFFFFA500);
-        statusText = 'Nouvelle';
-        break;
-      case 'accepted':
-        statusColor = const Color(0xFF2196F3);
-        statusText = 'Acceptée';
-        break;
-      case 'collecting':
-      case 'collected':
-      case 'picked_up':
-        statusColor = AppColors.primary;
-        statusText = 'Récupérée';
-        break;
-      case 'delivering':
-        statusColor = AppColors.primary;
-        statusText = 'En livraison';
-        break;
-      case 'delivered':
-        statusColor = const Color(0xFF4CD964);
-        statusText = 'Livrée';
-        break;
-      case 'not_delivered':
-      case 'not-delivered':
-        statusColor = const Color(0xFFFF6B6B);
-        statusText = 'Non livrée';
-        break;
-      case 'cancelled':
-      case 'canceled':
-        statusColor = Colors.grey;
-        statusText = 'Annulée';
-        break;
-      default:
-        statusColor = Colors.grey;
-        statusText = mission.status ?? 'Inconnu';
-    }
+    final MissionStatusVisual visual =
+        MissionStatusVisual.resolve(mission.status);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -385,33 +342,27 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // En-tete avec reference et statut
+              // En-tete avec reference et statut.
+              // Hero sur la référence : flie vers le header detail
+              // (delivery_details/index.dart). Tag stable par mission.
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    mission.orderReference,
-                    style: TextStyle(
-                      color: textColor,
-                      fontSize: 16.sp,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      statusText,
-                      style: TextStyle(
-                        color: statusColor,
-                        fontSize: 12.sp,
-                        fontWeight: FontWeight.w600,
+                  Hero(
+                    tag: 'mission-ref-${mission.id}',
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Text(
+                        mission.orderReference,
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 16.sp,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
+                  MissionStatusChip(visual: visual, dense: true),
                 ],
               ),
 
@@ -496,13 +447,13 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen>
                     _buildSmallBadge(
                       'location_on',
                       '${mission.distance!.toStringAsFixed(1)} km',
-                      const Color(0xFF4CD964),
+                      ZeetColors.success,
                     ),
                   if (mission.distance != null) const SizedBox(width: 8),
                   _buildSmallBadge(
                     'restaurant',
                     mission.itemCountText,
-                    const Color(0xFFFF6B6B),
+                    ZeetColors.danger,
                   ),
                   const Spacer(),
                   ZeetMoney(

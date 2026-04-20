@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/services/api_client.dart';
+import 'package:rider/services/location_tracking_service.dart';
 import 'package:rider/services/status_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -86,11 +89,16 @@ class StatusNotifier extends StateNotifier<StatusState> {
         isLoading: false,
       );
 
+      // Bascule le tracking GPS idle (sans mission active).
+      // Si une mission active est deja en cours, le LocationTrackingService
+      // ignorera (mode missionActive prioritaire).
+      _syncIdleTrackingWithStatus(newStatus);
+
       return {
         'success': true,
         'message': newStatus
-            ? 'Vous etes maintenant en ligne'
-            : 'Vous etes maintenant hors ligne',
+            ? "Te voilà en ligne. Bonnes courses !"
+            : 'En pause. À très vite.',
       };
     } on ApiException catch (e) {
       state = state.copyWith(
@@ -101,9 +109,9 @@ class StatusNotifier extends StateNotifier<StatusState> {
     } catch (_) {
       state = state.copyWith(
         isLoading: false,
-        errorMessage: 'Erreur lors du changement de statut',
+        errorMessage: 'Changement impossible. Réessaye.',
       );
-      return {'success': false, 'message': 'Erreur lors du changement de statut'};
+      return {'success': false, 'message': 'Changement impossible. Réessaye.'};
     }
   }
 
@@ -126,6 +134,22 @@ class StatusNotifier extends StateNotifier<StatusState> {
   /// Met a jour le statut localement (ex: apres un checkAuthStatus qui contient rider_status).
   void setOnlineLocally(bool online) {
     state = state.copyWith(isOnline: online);
+    _syncIdleTrackingWithStatus(online);
+  }
+
+  /// Synchronise le tracking idle avec le statut online. Si online + pas de
+  /// mission active : start idle. Si offline : stop tout.
+  /// Le mode missionActive (start via accept/collect) prend toujours priorite.
+  void _syncIdleTrackingWithStatus(bool online) {
+    final svc = LocationTrackingService.instance;
+    if (online) {
+      if (svc.mode != LocationTrackingMode.missionActive) {
+        // Pas de mission en cours -> idle.
+        unawaited(svc.startIdleTracking());
+      }
+    } else {
+      unawaited(svc.stopTracking());
+    }
   }
 }
 

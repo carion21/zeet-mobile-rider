@@ -204,12 +204,12 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       case 'delivery_update':
       case 'mission_update':
         iconName = 'info';
-        iconColor = const Color(0xFF2196F3);
+        iconColor = ZeetColors.info;
         break;
       case 'payment':
       case 'earnings':
         iconName = 'wallet';
-        iconColor = const Color(0xFF4CD964);
+        iconColor = ZeetColors.success;
         break;
       case 'info':
       default:

@@ -256,17 +256,24 @@ class _DeliveryHistoryTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            // Ligne 1 : code + statut
+            // Ligne 1 : code + statut. Hero `mission-ref-${id}` flie
+            // vers le header du detail.
             Row(
               children: <Widget>[
                 Expanded(
-                  child: Text(
-                    item.displayCode,
-                    style: tt.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
+                  child: Hero(
+                    tag: 'mission-ref-${item.id}',
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Text(
+                        item.displayCode,
+                        style: tt.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 SizedBox(width: 8.w),

@@ -1,5 +1,6 @@
 // lib/services/routing_service.dart
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
@@ -64,11 +65,11 @@ class RoutingService {
           durationSeconds: totalTime,
         );
       } else {
-        print('❌ Erreur Valhalla: ${response.statusCode} - ${response.body}');
+        debugPrint('❌ Erreur Valhalla: ${response.statusCode} - ${response.body}');
         return null;
       }
     } catch (e) {
-      print('❌ Erreur lors du calcul de l\'itinéraire: $e');
+      debugPrint('❌ Erreur lors du calcul de l\'itinéraire: $e');
       return null;
     }
   }

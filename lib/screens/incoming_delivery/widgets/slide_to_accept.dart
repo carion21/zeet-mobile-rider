@@ -10,6 +10,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 
 class SlideToAcceptButton extends StatefulWidget {
   final String label;
@@ -30,7 +31,7 @@ class SlideToAcceptButton extends StatefulWidget {
     this.trackColor = const Color(0x33FFFFFF),
     this.handleColor = Colors.white,
     this.labelColor = Colors.white,
-    this.iconColor = const Color(0xFFFF5A1F),
+    this.iconColor = ZeetColors.primary,
     this.height = 72,
     this.enabled = true,
   });

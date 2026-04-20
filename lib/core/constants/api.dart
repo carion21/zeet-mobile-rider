@@ -50,8 +50,22 @@ abstract class DeliveryEndpoints {
   /// (distinct des missions actives).
   static const String list = '/rider/deliveries';
 
-  /// GET /v1/rider/deliveries/actions — actions canoniques cote livraisons.
+  /// GET /v1/rider/deliveries/actions?status=... — actions canoniques cote
+  /// livraisons (delivery state). Source de verite pour generer les boutons UI.
   static const String deliveriesActions = '/rider/deliveries/actions';
+
+  /// GET /v1/rider/deliveries/transitions?status=... — transitions delivery
+  /// possibles depuis un statut donne (debug + filtrage UI).
+  static const String deliveriesTransitions = '/rider/deliveries/transitions';
+}
+
+// ---------------------------------------------------------------------------
+// Order actions (côté commande, plus large que delivery)
+// ---------------------------------------------------------------------------
+abstract class OrderActionEndpoints {
+  /// GET /v1/rider/orders/actions?status=... — actions canoniques cote
+  /// commande (order state). Source de verite pour generer les boutons UI.
+  static const String ordersActions = '/rider/orders/actions';
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +120,17 @@ abstract class RatingEndpoints {
 abstract class StatsEndpoints {
   /// GET /v1/rider/stats — statistiques agregees du rider sur une periode.
   static const String summary = '/rider/stats';
+}
+
+// ---------------------------------------------------------------------------
+// Support (tickets contextualises depuis une mission)
+// ---------------------------------------------------------------------------
+abstract class SupportEndpoints {
+  /// POST /v1/rider/tickets — cree un ticket support contextualise.
+  /// Body : `{ mission_id, mission_ref, reason, note?, address_context? }`.
+  /// A confirmer cote backend (api-reference.json a `/v1/client/tickets`,
+  /// l'equivalent rider est suppose suivre la meme convention).
+  static const String createTicket = '/rider/tickets';
 }
 
 // ---------------------------------------------------------------------------

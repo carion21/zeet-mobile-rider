@@ -25,9 +25,11 @@ import 'package:intl/intl.dart';
 import 'package:rider/core/widgets/toastification.dart';
 import 'package:rider/models/incoming_delivery_payload.dart';
 import 'package:rider/providers/incoming_delivery_provider.dart';
+import 'package:rider/screens/incoming_delivery/widgets/first_run_swipe_hint.dart';
 import 'package:rider/screens/incoming_delivery/widgets/slide_to_accept.dart';
 import 'package:rider/services/incoming_ring_bridge.dart';
 import 'package:rider/services/navigation_service.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 
 class IncomingDeliveryScreen extends ConsumerStatefulWidget {
   const IncomingDeliveryScreen({super.key});
@@ -39,8 +41,8 @@ class IncomingDeliveryScreen extends ConsumerStatefulWidget {
 
 class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
     with SingleTickerProviderStateMixin {
-  static const Color _bg = Color(0xFFFF5A1F);
-  static const Color _bgDark = Color(0xFFE64A0F);
+  static const Color _bg = ZeetColors.primary;
+  static const Color _bgDark = ZeetColors.primaryDark;
   static const Color _ink = Colors.white;
 
   static final _currency = NumberFormat.currency(
@@ -53,6 +55,7 @@ class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
   Timer? _hapticTicker;
   bool _ringtonePlaying = false;
   bool _dismissing = false;
+  int _lastSecondsRemainingHapticed = -1;
 
   @override
   void initState() {
@@ -121,6 +124,18 @@ class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
 
   void _listenForAutoClose(IncomingDeliveryState state) {
     if (_dismissing) return;
+
+    // Haptic medium quand il reste 1s avant deadline (urgence finale).
+    // Skill zeet-pos-ergonomics : feedback haptic obligatoire pour
+    // moments critiques.
+    if (state.phase == IncomingDeliveryPhase.ringing &&
+        state.secondsRemaining == 1 &&
+        _lastSecondsRemainingHapticed != 1) {
+      _lastSecondsRemainingHapticed = 1;
+      HapticFeedback.mediumImpact();
+    } else if (state.secondsRemaining > 1) {
+      _lastSecondsRemainingHapticed = -1;
+    }
 
     if (state.phase != IncomingDeliveryPhase.ringing && _ringtonePlaying) {
       _stopRinging();
@@ -251,58 +266,82 @@ class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
 
   Widget _buildCountdownRing(IncomingDeliveryState state) {
     final size = 68.w;
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          SizedBox(
-            width: size,
-            height: size,
-            child: CircularProgressIndicator(
-              value: 1,
-              strokeWidth: 5,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                _ink.withValues(alpha: 0.18),
-              ),
-            ),
-          ),
-          SizedBox(
-            width: size,
-            height: size,
-            child: CircularProgressIndicator(
-              value: state.progress,
-              strokeWidth: 5,
-              valueColor: const AlwaysStoppedAnimation<Color>(_ink),
-              strokeCap: StrokeCap.round,
-            ),
-          ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${state.secondsRemaining}',
-                style: TextStyle(
-                  color: _ink,
-                  fontSize: 20.sp,
-                  fontWeight: FontWeight.w800,
-                  height: 1,
+    // Degrade vert -> orange -> rouge selon le temps restant.
+    // progress = 1 = full, 0 = expire.
+    final ringColor = _resolveRingColor(state.progress);
+    // Isole le repaint du ring -> evite de repaint le reste de l'ecran a
+    // chaque tick (cf. zeet-performance-budget §3 RepaintBoundary).
+    return RepaintBoundary(
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              width: size,
+              height: size,
+              child: CircularProgressIndicator(
+                value: 1,
+                strokeWidth: 5,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  _ink.withValues(alpha: 0.18),
                 ),
               ),
-              Text(
-                'sec',
-                style: TextStyle(
-                  color: _ink.withValues(alpha: 0.75),
-                  fontSize: 9.sp,
-                  fontWeight: FontWeight.w600,
-                ),
+            ),
+            SizedBox(
+              width: size,
+              height: size,
+              child: CircularProgressIndicator(
+                value: state.progress,
+                strokeWidth: 5,
+                valueColor: AlwaysStoppedAnimation<Color>(ringColor),
+                strokeCap: StrokeCap.round,
               ),
-            ],
-          ),
-        ],
+            ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${state.secondsRemaining}',
+                  style: TextStyle(
+                    color: _ink,
+                    fontSize: 20.sp,
+                    fontWeight: FontWeight.w800,
+                    height: 1,
+                  ),
+                ),
+                Text(
+                  'sec',
+                  style: TextStyle(
+                    color: _ink.withValues(alpha: 0.75),
+                    fontSize: 9.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  /// Interpole vert (full) -> jaune -> rouge (expire) selon `progress`.
+  /// progress in [0, 1].
+  Color _resolveRingColor(double progress) {
+    final p = progress.clamp(0.0, 1.0);
+    if (p >= 0.5) {
+      // Vert vif -> blanc (full pulse). On reste sur _ink pour preserver
+      // le contraste sur fond orange tant qu'il y a du temps.
+      return _ink;
+    } else if (p >= 0.25) {
+      // Zone d'alerte : amber
+      return const Color(0xFFFFE082);
+    } else {
+      // Urgence : rouge vif
+      return const Color(0xFFFF5252);
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -496,6 +535,10 @@ class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
 
     return Column(
       children: [
+        // Coach-mark first-run : fleche animee + "Glisse vers la droite".
+        // Disparait apres 6s ou definitivement apres 1ere apparition.
+        // Skill `zeet-gesture-grammar` §6 (discoverability).
+        const FirstRunSwipeHint(),
         SlideToAcceptButton(
           key: ValueKey(state.payload?.deliveryId ?? 0),
           label: busy ? 'CONFIRMATION...' : 'GLISSER POUR ACCEPTER',
@@ -615,7 +658,7 @@ class _AddressRow extends StatelessWidget {
             shape: BoxShape.circle,
             color: Colors.white,
           ),
-          child: Icon(icon, color: const Color(0xFFFF5A1F), size: 22.sp),
+          child: Icon(icon, color: ZeetColors.primary, size: 22.sp),
         ),
         SizedBox(width: 14.w),
         Expanded(

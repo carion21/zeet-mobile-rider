@@ -73,7 +73,21 @@ class FcmService {
     return _instance!;
   }
 
-  Future<void> init({required FcmDataHandler onDataMessage}) async {
+  /// Initialise les listeners FCM + local notifications + channels.
+  ///
+  /// Par défaut **ne demande PAS** la permission système (`promptPermission:
+  /// false`) — le pre-prompt custom `NotifRationaleSheet` doit être affiché
+  /// avant, côté écran d'accueil post-auth. Cela évite de brûler la chance
+  /// iOS (one-shot) au cold-start quand le rider n'est pas encore connecté.
+  ///
+  /// Pour backward compat, passer `promptPermission: true` reproduit
+  /// l'ancien comportement (permission demandée immédiatement).
+  ///
+  /// Cf. zeet-notification-strategy §8 — "ask in context".
+  Future<void> init({
+    required FcmDataHandler onDataMessage,
+    bool promptPermission = false,
+  }) async {
     if (_initialized) {
       _onDataMessage = onDataMessage;
       return;
@@ -95,24 +109,8 @@ class FcmService {
       },
     );
 
-    final settings = await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
-    debugPrint(
-      '[FcmService] permission status: ${settings.authorizationStatus}',
-    );
-
-    try {
-      final token = await messaging.getToken();
-      if (token != null && token.isNotEmpty) {
-        DeviceTokenManager.instance.setPushToken(token);
-        debugPrint('[FcmService] FCM token: ${token.substring(0, 16)}...');
-        await DeviceTokenManager.instance.registerCurrentDevice();
-      }
-    } catch (e) {
-      debugPrint('[FcmService] getToken failed: $e');
+    if (promptPermission) {
+      await requestPushPermission();
     }
 
     _onTokenRefreshSub = messaging.onTokenRefresh.listen((token) async {
@@ -139,27 +137,41 @@ class FcmService {
       _dispatch(message);
     });
 
-    final initial = await messaging.getInitialMessage();
-    if (initial != null) {
-      debugPrint(
-        '[FcmService] cold-start FCM message: '
-        'type=${initial.data['type_value'] ?? initial.data['type']}',
-      );
-      Future.delayed(const Duration(milliseconds: 800), () {
-        _dispatch(initial);
-      });
+    // Note : le cold-start (getInitialMessage / getLaunchPayload) est
+    // desormais gere AVANT runApp par `NotificationLaunchRouter.capture()`
+    // et route par le SplashScreen. Evite un double dispatch qui ferait
+    // clignoter le home entre le splash et l'ecran cible.
+  }
+
+  /// Déclenche la demande de permission notification système + enregistrement
+  /// du token FCM. À appeler **après** le pre-prompt `NotifRationaleSheet`
+  /// depuis l'écran d'accueil post-auth.
+  ///
+  /// Idempotent : si la permission est déjà accordée, récupère juste le
+  /// token et le synchronise côté serveur.
+  Future<AuthorizationStatus> requestPushPermission() async {
+    final messaging = FirebaseMessaging.instance;
+    final settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    debugPrint(
+      '[FcmService] permission status: ${settings.authorizationStatus}',
+    );
+
+    try {
+      final token = await messaging.getToken();
+      if (token != null && token.isNotEmpty) {
+        DeviceTokenManager.instance.setPushToken(token);
+        debugPrint('[FcmService] FCM token: ${token.substring(0, 16)}...');
+        await DeviceTokenManager.instance.registerCurrentDevice();
+      }
+    } catch (e) {
+      debugPrint('[FcmService] getToken failed: $e');
     }
 
-    final launchPayload = await LocalNotificationService.getLaunchPayload();
-    if (launchPayload != null && launchPayload.isNotEmpty) {
-      debugPrint(
-        '[FcmService] cold-start local notif: '
-        'type=${launchPayload['type_value'] ?? launchPayload['type']}',
-      );
-      Future.delayed(const Duration(milliseconds: 800), () {
-        _onDataMessage?.call(launchPayload);
-      });
-    }
+    return settings.authorizationStatus;
   }
 
   void _dispatch(RemoteMessage message) {

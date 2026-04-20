@@ -30,6 +30,7 @@ import 'package:rider/models/earnings_model.dart';
 import 'package:rider/models/rider_stats_model.dart';
 import 'package:rider/providers/earnings_provider.dart';
 import 'package:rider/providers/stats_provider.dart';
+import 'package:rider/screens/stats/widgets/end_of_day_recap_sheet.dart';
 import 'package:rider/services/navigation_service.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import 'package:zeet_ui/zeet_ui.dart';
@@ -159,10 +160,9 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
       appBar: AppBar(
         backgroundColor: backgroundColor,
         elevation: 0,
-        leading: IconButton(
-          icon: IconManager.getIcon('arrow_back', color: textColor),
-          onPressed: () => Routes.goBack(),
-        ),
+        // Pas de leading back button : l'ecran est un onglet permanent du
+        // MainScaffold, on revient au Home via la bottom nav.
+        automaticallyImplyLeading: false,
         title: Text(
           'Statistiques',
           style: TextStyle(
@@ -172,6 +172,26 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           ),
         ),
         centerTitle: true,
+        actions: <Widget>[
+          // Clôture de service — affiche un récap peak moment quand on
+          // est en mode "today" et qu'au moins une livraison a été faite.
+          if (_preset == _StatsPreset.today &&
+              (statsState.stats?.deliveredCount ?? 0) > 0)
+            IconButton(
+              tooltip: 'Clôturer ma journée',
+              icon: Icon(Icons.bedtime_rounded, color: textColor),
+              onPressed: () {
+                final stats = statsState.stats;
+                if (stats == null) return;
+                showEndOfDayRecapSheet(
+                  context,
+                  deliveries: stats.deliveredCount,
+                  earnings: stats.totalEarnings,
+                  isRecord: false,
+                );
+              },
+            ),
+        ],
       ),
       body: RefreshIndicator(
         color: AppColors.primary,
@@ -200,14 +220,16 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
     Color textLightColor,
     bool isDarkMode,
   ) {
-    // Loading initial (pas de donnees du tout).
+    // Loading initial : skeleton list au lieu d'un spinner plein écran
+    // (skill zeet-states-elae §2 — hierarchy "skeleton first").
     if (statsState.isLoading && statsState.stats == null) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.symmetric(horizontal: 16.w),
         children: [
           _buildPeriodFilter(textColor, textLightColor, surfaceColor),
-          SizedBox(height: 0.25.sh),
-          const Center(child: CircularProgressIndicator()),
+          SizedBox(height: 16.h),
+          const ZeetSkeletonList(itemCount: 5, itemHeight: 110),
         ],
       );
     }
@@ -454,7 +476,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           end: Alignment.bottomRight,
           colors: [
             AppColors.primary,
-            AppColors.primary.withOpacity(0.85),
+            AppColors.primary.withValues(alpha: 0.85),
           ],
         ),
         borderRadius: BorderRadius.circular(16.r),
@@ -465,7 +487,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           Text(
             'Gains totaux',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white.withValues(alpha: 0.9),
               fontSize: 13.sp,
               fontWeight: FontWeight.w500,
             ),
@@ -484,7 +506,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           Text(
             '${stats.deliveredCount} livraison${stats.deliveredCount > 1 ? 's' : ''} reussie${stats.deliveredCount > 1 ? 's' : ''}',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white.withValues(alpha: 0.9),
               fontSize: 13.sp,
             ),
           ),
@@ -509,7 +531,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
         Expanded(
           child: _buildKpiCard(
             label: 'Total',
-            value: '${stats.totalDeliveries}',
+            value: stats.totalDeliveries,
             icon: 'delivery',
             color: AppColors.primary,
             surfaceColor: surfaceColor,
@@ -522,9 +544,9 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
         Expanded(
           child: _buildKpiCard(
             label: 'Livrees',
-            value: '${stats.deliveredCount}',
+            value: stats.deliveredCount,
             icon: 'check',
-            color: const Color(0xFF4CD964),
+            color: ZeetColors.success,
             surfaceColor: surfaceColor,
             textColor: textColor,
             textLightColor: textLightColor,
@@ -535,9 +557,9 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
         Expanded(
           child: _buildKpiCard(
             label: 'Echouees',
-            value: '${stats.notDeliveredCount}',
+            value: stats.notDeliveredCount,
             icon: 'warning',
-            color: const Color(0xFFFF6B6B),
+            color: ZeetColors.danger,
             surfaceColor: surfaceColor,
             textColor: textColor,
             textLightColor: textLightColor,
@@ -581,7 +603,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
             value: stats.completionRate,
             helper:
                 '${stats.deliveredCount} / ${stats.totalDeliveries} livraisons',
-            color: const Color(0xFF4CD964),
+            color: ZeetColors.success,
             surfaceColor: surfaceColor,
             textColor: textColor,
             textLightColor: textLightColor,
@@ -602,7 +624,6 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
     required Color textLightColor,
     required bool isDarkMode,
   }) {
-    final pct = (value * 100).clamp(0, 100).toStringAsFixed(0);
     return Container(
       padding: EdgeInsets.all(16.w),
       decoration: BoxDecoration(
@@ -610,8 +631,8 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
         borderRadius: BorderRadius.circular(16.r),
         border: Border.all(
           color: isDarkMode
-              ? Colors.white.withOpacity(0.08)
-              : Colors.grey.withOpacity(0.15),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.grey.withValues(alpha: 0.15),
           width: 1,
         ),
       ),
@@ -627,8 +648,9 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
             ),
           ),
           SizedBox(height: 8.h),
-          Text(
-            '$pct%',
+          ZeetRollingCounter(
+            value: (value * 100).clamp(0, 100),
+            suffix: '%',
             style: TextStyle(
               color: color,
               fontSize: 24.sp,
@@ -641,7 +663,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
             child: LinearProgressIndicator(
               value: value.clamp(0, 1).toDouble(),
               minHeight: 6,
-              backgroundColor: color.withOpacity(0.15),
+              backgroundColor: color.withValues(alpha: 0.15),
               valueColor: AlwaysStoppedAnimation<Color>(color),
             ),
           ),
@@ -673,8 +695,8 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
         borderRadius: BorderRadius.circular(16.r),
         border: Border.all(
           color: isDarkMode
-              ? Colors.white.withOpacity(0.08)
-              : Colors.grey.withOpacity(0.15),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.grey.withValues(alpha: 0.15),
           width: 1,
         ),
       ),
@@ -684,7 +706,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
             width: 56.w,
             height: 56.w,
             decoration: BoxDecoration(
-              color: const Color(0xFFFFC107).withOpacity(0.15),
+              color: const Color(0xFFFFC107).withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(14.r),
             ),
             child: Center(
@@ -712,8 +734,9 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(
-                      stats.ratingAvg.toStringAsFixed(1),
+                    ZeetRollingCounter(
+                      value: stats.ratingAvg,
+                      fractionDigits: 1,
                       style: TextStyle(
                         color: textColor,
                         fontSize: 24.sp,
@@ -784,8 +807,8 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
         borderRadius: BorderRadius.circular(16.r),
         border: Border.all(
           color: isDarkMode
-              ? Colors.white.withOpacity(0.08)
-              : Colors.grey.withOpacity(0.15),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.grey.withValues(alpha: 0.15),
           width: 1,
         ),
       ),
@@ -797,12 +820,12 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
               Container(
                 padding: EdgeInsets.all(8.w),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF4CD964).withOpacity(0.15),
+                  color: ZeetColors.success.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8.r),
                 ),
                 child: IconManager.getIcon(
                   'wallet',
-                  color: const Color(0xFF4CD964),
+                  color: ZeetColors.success,
                   size: 18,
                 ),
               ),
@@ -842,8 +865,8 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                   majorGridLines: MajorGridLines(
                     width: 1,
                     color: isDarkMode
-                        ? Colors.white.withOpacity(0.05)
-                        : Colors.grey.withOpacity(0.1),
+                        ? Colors.white.withValues(alpha: 0.05)
+                        : Colors.grey.withValues(alpha: 0.1),
                   ),
                   labelStyle:
                       TextStyle(color: textLightColor, fontSize: 11.sp),
@@ -854,7 +877,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                     dataSource: data,
                     xValueMapper: (d, _) => d.label,
                     yValueMapper: (d, _) => d.value,
-                    color: const Color(0xFF4CD964),
+                    color: ZeetColors.success,
                     borderRadius:
                         const BorderRadius.vertical(top: Radius.circular(6)),
                   ),
@@ -900,9 +923,12 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
   // KPI card helper
   // ---------------------------------------------------------------------------
 
+  /// Card KPI avec compteur animé (rolling counter) — change de période
+  /// (today/week/month) déclenche une animation flip vers la nouvelle valeur.
+  /// Skill : zeet-motion-system §6 (Number animation grammar).
   Widget _buildKpiCard({
     required String label,
-    required String value,
+    required num value,
     required String icon,
     required Color color,
     required Color surfaceColor,
@@ -917,8 +943,8 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
         borderRadius: BorderRadius.circular(14.r),
         border: Border.all(
           color: isDarkMode
-              ? Colors.white.withOpacity(0.08)
-              : Colors.grey.withOpacity(0.15),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.grey.withValues(alpha: 0.15),
           width: 1,
         ),
       ),
@@ -928,14 +954,14 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           Container(
             padding: EdgeInsets.all(8.w),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.15),
+              color: color.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10.r),
             ),
             child: IconManager.getIcon(icon, color: color, size: 18),
           ),
           SizedBox(height: 10.h),
-          Text(
-            value,
+          ZeetRollingCounter(
+            value: value,
             style: TextStyle(
               color: textColor,
               fontSize: 20.sp,

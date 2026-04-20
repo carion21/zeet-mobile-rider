@@ -111,13 +111,14 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
     Color surfaceColor,
     bool isDarkMode,
   ) {
-    // Loading initial.
+    // Loading initial : skeleton list au lieu d'un spinner plein écran
+    // (skill zeet-states-elae §2 — hierarchy "skeleton first").
     if (state.isLoading && state.entries.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          SizedBox(height: 0.3.sh),
-          const Center(child: CircularProgressIndicator()),
+        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+        children: const [
+          ZeetSkeletonList(itemCount: 5, itemHeight: 96),
         ],
       );
     }
@@ -172,14 +173,8 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
         if (index == state.entries.length + 1) {
           if (state.isLoadingMore) {
             return Padding(
-              padding: EdgeInsets.all(16.w),
-              child: const Center(
-                child: SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.4),
-                ),
-              ),
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 6.h),
+              child: const ZeetSkeleton(height: 96),
             );
           }
           if (!state.hasMore && state.entries.length > 5) {
@@ -232,7 +227,7 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
           end: Alignment.bottomRight,
           colors: [
             AppColors.primary,
-            AppColors.primary.withOpacity(0.85),
+            AppColors.primary.withValues(alpha: 0.85),
           ],
         ),
         borderRadius: BorderRadius.circular(16.r),
@@ -245,7 +240,7 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
               Text(
                 'Note moyenne',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
+                  color: Colors.white.withValues(alpha: 0.9),
                   fontSize: 13.sp,
                   fontWeight: FontWeight.w500,
                 ),
@@ -269,7 +264,7 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
                     child: Text(
                       '/ 5',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                         fontSize: 14.sp,
                         fontWeight: FontWeight.w600,
                       ),
@@ -283,7 +278,7 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
               Text(
                 '${summary.totalRatings} avis recu${summary.totalRatings > 1 ? 's' : ''}',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
+                  color: Colors.white.withValues(alpha: 0.9),
                   fontSize: 12.sp,
                 ),
               ),
@@ -318,8 +313,8 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
         borderRadius: BorderRadius.circular(14.r),
         border: Border.all(
           color: isDarkMode
-              ? Colors.white.withOpacity(0.08)
-              : Colors.grey.withOpacity(0.15),
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.grey.withValues(alpha: 0.15),
           width: 1,
         ),
       ),
@@ -410,7 +405,7 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.12),
+        color: AppColors.primary.withValues(alpha: 0.12),
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,

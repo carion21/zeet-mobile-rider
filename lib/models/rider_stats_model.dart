@@ -6,6 +6,7 @@
 /// IMPORTANT : les metriques `avg_pickup_time`, `avg_delivery_time`,
 /// `total_km`, `streak_days`, `total_active_hours` ne sont PAS livrees
 /// par le backend — ne pas les modeliser.
+library;
 
 class RiderStatsPeriod {
   final String? dateFrom;

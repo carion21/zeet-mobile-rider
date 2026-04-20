@@ -5,6 +5,7 @@ import 'package:rider/screens/auth/login/index.dart';
 import 'package:rider/screens/auth/verify_otp/index.dart';
 import 'package:rider/screens/profile/index.dart';
 import 'package:rider/screens/home/index.dart';
+import 'package:rider/screens/main_scaffold/index.dart';
 import 'package:rider/screens/deliveries/index.dart';
 import 'package:rider/screens/delivery_details/index.dart';
 import 'package:rider/screens/notifications/index.dart';
@@ -14,6 +15,8 @@ import 'package:rider/screens/support/index.dart';
 import 'package:rider/screens/deliveries_history/index.dart';
 import 'package:rider/screens/availability_log/index.dart';
 import 'package:rider/screens/ratings/index.dart';
+import 'package:rider/screens/permissions/index.dart';
+import 'package:rider/screens/offline_queue/index.dart';
 import 'package:rider/models/delivery_model.dart';
 import 'package:zeet_ui/zeet_ui.dart';
 
@@ -33,6 +36,7 @@ class Routes {
 
   // Définition des routes statiques
   static const String splash = '/';
+  static const String mainScaffold = '/main';
   static const String home = '/home';
   static const String login = '/login';
   static const String profile = '/profile';
@@ -44,10 +48,13 @@ class Routes {
   static const String deliveriesHistory = '/deliveries-history';
   static const String availabilityLog = '/availability-log';
   static const String ratings = '/ratings';
+  static const String permissions = '/permissions';
+  static const String offlineQueue = '/offline-queue';
 
   // Définition des constructeurs de widgets pour chaque route
   static final Map<String, WidgetBuilder> routes = {
     splash: (context) => const SplashScreen(),
+    mainScaffold: (context) => const MainScaffold(),
     home: (context) => const HomeScreen(),
     login: (context) => const LoginScreen(),
     profile: (context) => const ProfileScreen(),
@@ -59,6 +66,8 @@ class Routes {
     deliveriesHistory: (context) => const DeliveriesHistoryScreen(),
     availabilityLog: (context) => const AvailabilityLogScreen(),
     ratings: (context) => const RatingsScreen(),
+    permissions: (context) => const PermissionsScreen(),
+    offlineQueue: (context) => const OfflineQueueScreen(),
   };
 
   // ─── Helpers ZeetPageRoute ────────────────────────────────────────
@@ -151,6 +160,25 @@ class Routes {
             fullName: fullName,
             type: type,
           )),
+    );
+  }
+
+  /// Ouvre le [MainScaffold] sur un onglet specifique.
+  ///
+  /// Indices :
+  ///   0 = Home, 1 = Livraisons, 2 = Stats, 3 = Profil.
+  ///
+  /// Pop tout l'historique au-dessus du MainScaffold puis push une
+  /// nouvelle instance pre-positionnee sur l'onglet demande. Utile pour
+  /// les deep-links FCM qui veulent atterrir directement sur un tab.
+  static void openMainTab(int index) {
+    if (navigatorKey.currentState == null) return;
+    navigatorKey.currentState!.pushAndRemoveUntil<void>(
+      _buildRoute<void>(
+        (_) => MainScaffold(initialIndex: index),
+        settings: const RouteSettings(name: mainScaffold),
+      ),
+      (Route<dynamic> route) => false,
     );
   }
 

@@ -15,10 +15,21 @@
          accordee manuellement a l'install assistee. -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- Permet de demander a l'utilisateur d'exclure ZEET du battery optimizer
+         (REQUEST_IGNORE_BATTERY_OPTIMIZATIONS). Sans ca, le prompt natif reste
+         silencieux et permission_handler log "No permissions found in manifest". -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Phase 4 : ForegroundService natif pour la sonnerie en boucle
          (IncomingRingService) meme quand l'app est killed. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SHORT_SERVICE" />
+    <!-- GPS background pendant les missions actives (Android 14+ exige le
+         type explicite FOREGROUND_SERVICE_LOCATION). Source de verite :
+         skill zeet-offline-first §11 (rider sous-sol). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <!-- Upload avatar rider (photo profil) via image_picker -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
@@ -73,6 +84,14 @@
             android:name=".IncomingRingService"
             android:exported="false"
             android:foregroundServiceType="shortService" />
+
+        <!-- Service flutter_foreground_task pour le tracking GPS continu
+             pendant une mission active. foregroundServiceType="location"
+             est obligatoire depuis Android 14 (API 34). -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="location"
+            android:exported="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

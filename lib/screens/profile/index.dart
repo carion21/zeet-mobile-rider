@@ -23,11 +23,14 @@ import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:rider/core/constants/sizes.dart';
 import 'package:rider/core/widgets/app_popup.dart';
+import 'package:rider/core/widgets/notif_permission_status.dart';
 import 'package:rider/core/widgets/toastification.dart';
 import 'package:rider/models/rider_model.dart';
 import 'package:rider/providers/auth_provider.dart';
+import 'package:rider/providers/main_tab_provider.dart';
 import 'package:rider/providers/profile_provider.dart';
 import 'package:rider/providers/status_provider.dart';
+import 'package:rider/screens/stats/widgets/end_of_day_trigger.dart';
 import 'package:rider/services/navigation_service.dart';
 import 'package:zeet_ui/zeet_ui.dart';
 import 'package:rider/services/profile_service.dart';
@@ -74,6 +77,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   // ---------------------------------------------------------------------------
 
   Future<void> _toggleOnlineStatus() async {
+    // Capture l'etat AVANT le toggle pour detecter une transition
+    // online → offline (peak moment fin de journee).
+    final bool wasOnline = ref.read(isOnlineProvider);
+
     final result = await ref.read(statusProvider.notifier).toggleOnline();
     if (!mounted) return;
 
@@ -82,12 +89,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         context: context,
         message: result['message'] as String,
       );
+
+      // Hook fin de journee : si on vient de passer offline ET que des
+      // livraisons ont ete faites aujourd'hui, on declenche le recap.
+      // Skill `zeet-neuro-ux` §8 (peak-end rule) + §12bis.I (completion).
+      if (wasOnline) {
+        await _maybeShowEndOfDayRecap();
+      }
     } else {
       AppToast.showError(
         context: context,
         message: result['message'] as String,
       );
     }
+  }
+
+  /// Si le rider est passe offline avec un service > 0 livraison, on lui
+  /// presente un recap "Belle journee !" avec ses gains et son nb de
+  /// courses. Delegue a [EndOfDayTrigger] (helper partage avec le Home).
+  Future<void> _maybeShowEndOfDayRecap() async {
+    if (!mounted) return;
+    await EndOfDayTrigger.maybeShow(context, ref);
   }
 
   Future<void> _saveChanges() async {
@@ -219,7 +241,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _confirmLogout() async {
-    final bool? confirm = await AppPopup.showConfirmation(
+    final confirm = await AppPopup.showConfirmation(
       context: context,
       title: 'Deconnexion',
       message: 'Etes-vous sur de vouloir vous deconnecter ?',
@@ -258,7 +280,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         isDarkMode ? AppColors.darkBackground : const Color(0xFFF8F8F8);
     final surfaceColor = isDarkMode ? AppColors.darkSurface : Colors.white;
     final borderColor = isDarkMode
-        ? AppColors.darkTextLight.withOpacity(0.2)
+        ? AppColors.darkTextLight.withValues(alpha: 0.2)
         : const Color(0xFFEEEEEE);
 
     return Scaffold(
@@ -330,6 +352,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     _buildSaveButton(editState),
                     SizedBox(height: AppSizes().paddingLarge),
                   ],
+                  _buildNotifPermissionCard(surfaceColor),
+                  SizedBox(height: AppSizes().paddingMedium),
                   _buildProfileOptions(textColor, textLightColor, surfaceColor),
                   SizedBox(height: AppSizes().paddingXLarge),
                   _buildLogoutButton(),
@@ -380,7 +404,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 width: 100.w,
                 height: 100.w,
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.45),
+                  color: Colors.black.withValues(alpha: 0.45),
                   shape: BoxShape.circle,
                 ),
                 child: const Center(
@@ -511,7 +535,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           Switch(
             value: isOnline,
             onChanged: isLoading ? null : (_) => _toggleOnlineStatus(),
-            activeColor: Colors.green,
+            activeThumbColor: Colors.green,
           ),
         ],
       ),
@@ -623,7 +647,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           decoration: InputDecoration(
             hintText: hintText,
             hintStyle: TextStyle(
-              color: textLightColor.withOpacity(0.6),
+              color: textLightColor.withValues(alpha: 0.6),
               fontSize: 14.sp,
             ),
             prefixIcon: IconManager.getIcon(
@@ -717,7 +741,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: selected
-                          ? AppColors.primary.withOpacity(0.1)
+                          ? AppColors.primary.withValues(alpha: 0.1)
                           : surfaceColor,
                       border: Border.all(
                         color: selected ? AppColors.primary : borderColor,
@@ -754,8 +778,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: AppColors.primary.withOpacity(0.5),
-          disabledForegroundColor: Colors.white.withOpacity(0.7),
+          disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.5),
+          disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8.r),
@@ -782,6 +806,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   // ---------------------------------------------------------------------------
+  // Carte permission notifications (Phase 4)
+  // ---------------------------------------------------------------------------
+
+  /// Card dediee a l'etat de la permission notification, avec CTA pour
+  /// activer ou ouvrir les Reglages systeme (skill
+  /// zeet-notification-strategy §8 — fallback graceful refus hard).
+  Widget _buildNotifPermissionCard(Color surfaceColor) {
+    return Container(
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(12.r),
+      ),
+      child: const NotifPermissionTile(),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Menu d'options
   // ---------------------------------------------------------------------------
 
@@ -800,7 +841,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           _buildProfileOption(
             title: 'Mes livraisons',
             icon: 'delivery',
-            onTap: () => Routes.navigateTo(Routes.deliveries),
+            onTap: () => ref.read(mainTabIndexProvider.notifier).goDeliveries(),
             showDivider: true,
             textColor: textColor,
             textLightColor: textLightColor,
@@ -840,7 +881,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           _buildProfileOption(
             title: 'Statistiques',
             icon: 'trending_up',
-            onTap: () => Routes.navigateTo(Routes.stats),
+            onTap: () => ref.read(mainTabIndexProvider.notifier).goStats(),
             showDivider: true,
             textColor: textColor,
             textLightColor: textLightColor,
@@ -886,7 +927,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   width: 40.w,
                   height: 40.w,
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
+                    color: AppColors.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8.r),
                   ),
                   child: Center(
@@ -923,7 +964,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             thickness: 1,
             indent: 56.w,
             endIndent: 16.w,
-            color: textLightColor.withOpacity(0.1),
+            color: textLightColor.withValues(alpha: 0.1),
           ),
       ],
     );

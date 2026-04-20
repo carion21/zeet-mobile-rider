@@ -63,6 +63,11 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   # Lancement d'appels téléphoniques natifs (tel:) depuis les écrans mission
   url_launcher: ^6.3.1
+  # Runtime permissions (notifs, location, battery, alarms…) — onboarding.
+  permission_handler: ^11.3.1
+  # Service Android foreground + iOS background (significant change) pour
+  # le tracking GPS continu pendant les missions actives.
+  flutter_foreground_task: ^9.0.0
   zeet_ui:
     path: ../packages/zeet_ui
 
@@ -76,6 +81,17 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.3
+
+# Configuration des icônes de l'application
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo/logo.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/logo/logo.png"
+  min_sdk_android: 21
+  remove_alpha_ios: true
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -94,6 +110,7 @@ flutter:
     - assets/images/category/
     - assets/images/wallet/
     - assets/images/resto/
+    - assets/images/logo/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

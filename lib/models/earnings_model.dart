@@ -2,6 +2,7 @@
 /// Correspond aux reponses de `GET /v1/rider/earnings` et `GET /v1/rider/earnings/history`.
 ///
 /// Parsing defensif : tous les champs nullable sauf ceux structurels.
+library;
 
 // ---------------------------------------------------------------------------
 // Earnings Summary
