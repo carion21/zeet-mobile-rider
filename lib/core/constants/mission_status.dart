@@ -1,17 +1,13 @@
 // lib/core/constants/mission_status.dart
 //
-// Source de verite unique pour le status mission cote rider.
+// Metadata UI (icone + label) pour un statut mission cote rider. La couleur
+// vient maintenant du backend (`last_delivery_status.color`) et n'est plus
+// derivee ici — la seule regle cote mobile reste : "status = couleur API +
+// icone + label" (skill `zeet-pos-ergonomics` §6, glanceability).
 //
-// Avant : 3 helpers locaux (mission_card, deliveries, delivery_details)
-// dupliquaient la logique avec des labels divergents (« Recuperee » vs
-// « En collecte ») et des couleurs hardcodees (`Color(0xFF...)`).
-//
-// Apres : un seul mapping `MissionStatusVisual.resolve(rawApi)` qui
-// renvoie color + icon + label long + label court, ancres sur les tokens
-// `ZeetColors`. Tone rider direct (skill `zeet-micro-copy`).
+// Tone rider direct (skill `zeet-micro-copy`).
 
 import 'package:flutter/material.dart';
-import 'package:zeet_ui/zeet_ui.dart';
 
 /// Statut d'une mission tel qu'il transite cote API rider.
 enum MissionStatusKind {
@@ -29,14 +25,14 @@ enum MissionStatusKind {
   unknown,
 }
 
-/// Visuel complet d'un status mission.
+/// Metadata visuelle (hors couleur) pour un status mission.
 ///
-/// Regle ZEET : un status n'est jamais qu'une couleur — il faut couleur
-/// + icone + label (cf. `zeet-pos-ergonomics` §6, glanceability).
+/// La couleur est fournie par le champ `color` de l'API ; ce bundle
+/// complete avec l'icone et le label (court/long) qui restent cote
+/// client pour garder une voix produit coherente.
 class MissionStatusVisual {
   const MissionStatusVisual({
     required this.kind,
-    required this.color,
     required this.icon,
     required this.label,
     required this.shortLabel,
@@ -44,9 +40,6 @@ class MissionStatusVisual {
 
   /// Statut canonique resolu.
   final MissionStatusKind kind;
-
-  /// Couleur principale (texte + accent du chip).
-  final Color color;
 
   /// Icone associee (Material).
   final IconData icon;
@@ -70,7 +63,6 @@ class MissionStatusVisual {
       case 'assigned':
         return const MissionStatusVisual(
           kind: MissionStatusKind.assigned,
-          color: ZeetColors.warning,
           icon: Icons.notifications_active,
           label: 'Nouvelle livraison',
           shortLabel: 'Nouvelle',
@@ -78,7 +70,6 @@ class MissionStatusVisual {
       case 'accepted':
         return const MissionStatusVisual(
           kind: MissionStatusKind.accepted,
-          color: ZeetColors.info,
           icon: Icons.directions_bike_rounded,
           label: 'En route vers le resto',
           shortLabel: 'Acceptee',
@@ -86,7 +77,6 @@ class MissionStatusVisual {
       case 'collecting':
         return const MissionStatusVisual(
           kind: MissionStatusKind.collecting,
-          color: ZeetColors.collecting,
           icon: Icons.shopping_bag_rounded,
           label: 'En collecte chez le resto',
           shortLabel: 'En collecte',
@@ -95,15 +85,14 @@ class MissionStatusVisual {
       case 'picked_up':
         return const MissionStatusVisual(
           kind: MissionStatusKind.collected,
-          color: ZeetColors.primary,
           icon: Icons.shopping_bag_rounded,
           label: 'En route vers le client',
           shortLabel: 'Recuperee',
         );
       case 'delivering':
+      case 'on_the_way':
         return const MissionStatusVisual(
           kind: MissionStatusKind.delivering,
-          color: ZeetColors.primary,
           icon: Icons.delivery_dining_rounded,
           label: 'En livraison',
           shortLabel: 'En livraison',
@@ -111,7 +100,6 @@ class MissionStatusVisual {
       case 'delivered':
         return const MissionStatusVisual(
           kind: MissionStatusKind.delivered,
-          color: ZeetColors.success,
           icon: Icons.check_circle_rounded,
           label: 'Livree',
           shortLabel: 'Livree',
@@ -119,7 +107,6 @@ class MissionStatusVisual {
       case 'not_delivered':
         return const MissionStatusVisual(
           kind: MissionStatusKind.notDelivered,
-          color: ZeetColors.danger,
           icon: Icons.report_rounded,
           label: 'Non livree',
           shortLabel: 'Non livree',
@@ -128,7 +115,6 @@ class MissionStatusVisual {
       case 'canceled':
         return const MissionStatusVisual(
           kind: MissionStatusKind.cancelled,
-          color: ZeetColors.inkMuted,
           icon: Icons.cancel_rounded,
           label: 'Annulee',
           shortLabel: 'Annulee',
@@ -136,7 +122,6 @@ class MissionStatusVisual {
       case 'rejected':
         return const MissionStatusVisual(
           kind: MissionStatusKind.rejected,
-          color: ZeetColors.inkMuted,
           icon: Icons.cancel_rounded,
           label: 'Refusee',
           shortLabel: 'Refusee',
@@ -144,7 +129,6 @@ class MissionStatusVisual {
       default:
         return const MissionStatusVisual(
           kind: MissionStatusKind.unknown,
-          color: ZeetColors.inkMuted,
           icon: Icons.help_outline_rounded,
           label: 'Statut inconnu',
           shortLabel: 'Inconnu',

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:rider/core/constants/sizes.dart';
+import 'package:rider/core/widgets/freshness/zeet_freshness_chip.dart';
 import 'package:rider/models/notification_model.dart';
 import 'package:rider/providers/notifications_provider.dart';
 import 'package:rider/providers/connectivity_provider.dart';
@@ -23,6 +24,11 @@ class NotificationsScreen extends ConsumerStatefulWidget {
 class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   // Set pour tracker les IDs des notifications expandees
   final Set<int> _expandedNotifications = {};
+
+  // Clé pour notifier la chip freshness d'un refresh externe
+  // (pull-to-refresh, post-action). Tap direct sur la chip continue de
+  // fonctionner via son propre _refresh() interne.
+  final GlobalKey<ZeetFreshnessChipLocalState> _freshKey = GlobalKey();
 
   @override
   void initState() {
@@ -55,10 +61,12 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 
   Future<void> _markAllAsRead() async {
     await ref.read(notificationsListProvider.notifier).markAllAsRead();
+    _freshKey.currentState?.bump();
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refreshAll() async {
     await ref.read(notificationsListProvider.notifier).refresh();
+    _freshKey.currentState?.bump();
   }
 
   @override
@@ -108,10 +116,19 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                 ),
               ),
             ),
+          Padding(
+            padding: EdgeInsets.only(right: 8.w),
+            child: Center(
+              child: ZeetFreshnessChipLocal(
+                key: _freshKey,
+                onRefresh: _refreshAll,
+              ),
+            ),
+          ),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _refresh,
+        onRefresh: _refreshAll,
         color: AppColors.primary,
         child: _buildBody(
           listState,
@@ -139,7 +156,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 
     return ZeetScreenScaffold(
       state: _resolveState(state, notifications, isOnline),
-      onRetry: _refresh,
+      onRetry: _refreshAll,
       emptyTitle: 'Pas de notification',
       emptySubtitle: "On te préviendra dès qu'il y a du nouveau",
       emptyIcon: Icons.notifications_none_outlined,

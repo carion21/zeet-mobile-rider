@@ -7,6 +7,7 @@
 // Parsing defensif : tout est nullable sauf `id`.
 
 import 'package:flutter/material.dart';
+import 'package:rider/core/utils/hex_color.dart' as hex;
 
 /// Pagination standard ZEET.
 class DeliveryHistoryMeta {
@@ -47,6 +48,9 @@ class DeliveryHistoryStatus {
     this.value,
     this.colorHex,
   });
+
+  /// Couleur resolue depuis `colorHex` (null si non fournie / invalide).
+  Color? get color => hex.hexToColor(colorHex);
 
   factory DeliveryHistoryStatus.fromJson(Map<String, dynamic> json) {
     return DeliveryHistoryStatus(
@@ -297,15 +301,4 @@ DateTime? _parseDate(dynamic v) {
   if (v is DateTime) return v;
   if (v is String) return DateTime.tryParse(v);
   return null;
-}
-
-/// Utilitaire d'affichage : convertit un hex `#RRGGBB` backend en [Color].
-/// Renvoie une couleur neutre en fallback pour eviter tout crash.
-Color hexToColor(String? hex, {Color fallback = const Color(0xFF9CA3AF)}) {
-  if (hex == null || hex.isEmpty) return fallback;
-  var cleaned = hex.replaceAll('#', '');
-  if (cleaned.length == 6) cleaned = 'FF$cleaned';
-  final parsed = int.tryParse(cleaned, radix: 16);
-  if (parsed == null) return fallback;
-  return Color(parsed);
 }

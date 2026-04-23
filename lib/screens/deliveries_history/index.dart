@@ -19,6 +19,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
 import 'package:zeet_ui/zeet_ui.dart';
 
+import 'package:rider/core/widgets/freshness/zeet_freshness_chip.dart';
 import 'package:rider/models/delivery_history_model.dart';
 import 'package:rider/providers/delivery_history_provider.dart';
 import 'package:rider/services/navigation_service.dart';
@@ -34,6 +35,10 @@ class DeliveriesHistoryScreen extends ConsumerStatefulWidget {
 class _DeliveriesHistoryScreenState
     extends ConsumerState<DeliveriesHistoryScreen> {
   final ScrollController _scrollController = ScrollController();
+
+  // Clé pour notifier la chip freshness d'un refresh externe
+  // (pull-to-refresh, refresh button, retry).
+  final GlobalKey<ZeetFreshnessChipLocalState> _freshKey = GlobalKey();
 
   @override
   void initState() {
@@ -65,8 +70,9 @@ class _DeliveriesHistoryScreenState
     ref.read(deliveryHistoryProvider.notifier).setFilter(filter);
   }
 
-  Future<void> _onRefresh() async {
+  Future<void> _refreshAll() async {
     await ref.read(deliveryHistoryProvider.notifier).refresh();
+    _freshKey.currentState?.bump();
   }
 
   @override
@@ -94,8 +100,17 @@ class _DeliveriesHistoryScreenState
                 ? null
                 : () {
                     HapticFeedback.lightImpact();
-                    ref.read(deliveryHistoryProvider.notifier).refresh();
+                    _refreshAll();
                   },
+          ),
+          Padding(
+            padding: EdgeInsets.only(right: 8.w),
+            child: Center(
+              child: ZeetFreshnessChipLocal(
+                key: _freshKey,
+                onRefresh: _refreshAll,
+              ),
+            ),
           ),
         ],
       ),
@@ -113,7 +128,7 @@ class _DeliveriesHistoryScreenState
             else
               Expanded(
                 child: RefreshIndicator(
-                  onRefresh: _onRefresh,
+                  onRefresh: _refreshAll,
                   color: scheme.primary,
                   child: ListView.separated(
                     controller: _scrollController,
@@ -199,7 +214,7 @@ class _DeliveriesHistoryScreenState
         title: 'Erreur de chargement',
         description: message,
         actionLabel: 'Réessayer',
-        onAction: () => ref.read(deliveryHistoryProvider.notifier).load(),
+        onAction: _refreshAll,
       ),
     );
   }
@@ -240,7 +255,8 @@ class _DeliveryHistoryTile extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
-    final status = _statusFromItem(item);
+    final Color statusColor =
+        item.lastDeliveryStatus?.color ?? ZeetColors.inkMuted;
     final date = item.dateCreated;
     final dateLabel =
         date != null ? DateFormat('dd MMM · HH:mm', 'fr_FR').format(date) : '';
@@ -277,10 +293,9 @@ class _DeliveryHistoryTile extends StatelessWidget {
                   ),
                 ),
                 SizedBox(width: 8.w),
-                ZeetStatusChip(
-                  status: status,
+                _ApiStatusChip(
+                  color: statusColor,
                   label: item.statusLabel,
-                  dense: true,
                 ),
               ],
             ),
@@ -334,10 +349,41 @@ class _DeliveryHistoryTile extends StatelessWidget {
     );
   }
 
-  ZeetStatus _statusFromItem(DeliveryHistoryItem item) {
-    if (item.isDelivered) return ZeetStatus.success;
-    if (item.isFailed) return ZeetStatus.danger;
-    return ZeetStatus.neutral;
+}
+
+/// Chip de status pilote par la couleur renvoyee par l'API core
+/// (`last_delivery_status.color`). Si le backend ne fournit rien, la
+/// couleur neutre du design system est passee par l'appelant (fallback
+/// `ZeetColors.inkMuted`), sans re-mapping local.
+class _ApiStatusChip extends StatelessWidget {
+  const _ApiStatusChip({
+    required this.color,
+    required this.label,
+  });
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(ZeetRadius.pill),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        label,
+        style: tt.labelSmall?.copyWith(
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
   }
 }
 

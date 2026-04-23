@@ -3,7 +3,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/core/constants/colors.dart';
-import 'package:rider/core/constants/mission_status.dart';
 import 'package:rider/core/constants/sizes.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:rider/services/navigation_service.dart';
@@ -316,9 +315,6 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen>
     Color textLightColor,
     Color surfaceColor,
   ) {
-    final MissionStatusVisual visual =
-        MissionStatusVisual.resolve(mission.status);
-
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -362,7 +358,7 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen>
                       ),
                     ),
                   ),
-                  MissionStatusChip(visual: visual, dense: true),
+                  MissionStatusChip(mission: mission, dense: true),
                 ],
               ),
 

@@ -1,39 +1,28 @@
 // lib/widgets/mission_status_chip.dart
 //
 // Pill compact (icone + label) qui resume le status d'une mission rider.
-// Construit a partir de [MissionStatusVisual] -> couleurs et icones
-// proviennent du module canonical `core/constants/mission_status.dart`.
+// Couleur pilotee par le backend (`mission.statusColor`). L'icone et le
+// label viennent de [MissionStatusVisual] qui reste cote client pour
+// garder une voix produit coherente.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:rider/core/constants/mission_status.dart';
+import 'package:rider/models/mission_model.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 
 /// Chip de status mission, dense ou normal.
 class MissionStatusChip extends StatelessWidget {
   const MissionStatusChip({
     super.key,
-    required this.visual,
+    required this.mission,
     this.dense = false,
     this.useShortLabel = true,
   });
 
-  /// Construit le chip a partir d'une string brute API.
-  factory MissionStatusChip.raw(
-    String? rawStatus, {
-    Key? key,
-    bool dense = false,
-    bool useShortLabel = true,
-  }) {
-    return MissionStatusChip(
-      key: key,
-      visual: MissionStatusVisual.resolve(rawStatus),
-      dense: dense,
-      useShortLabel: useShortLabel,
-    );
-  }
-
-  /// Visuel resolu (color + icon + labels).
-  final MissionStatusVisual visual;
+  /// Mission source — porte a la fois le statut brut (pour icone/label) et
+  /// la couleur resolue par le backend.
+  final Mission mission;
 
   /// Densite reduite (badges en liste).
   final bool dense;
@@ -43,7 +32,13 @@ class MissionStatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String text = useShortLabel ? visual.shortLabel : visual.label;
+    final MissionStatusVisual visual =
+        MissionStatusVisual.resolve(mission.status);
+    final Color color = mission.statusColor ?? ZeetColors.inkMuted;
+    final String text = mission.lastDeliveryStatus?.label ??
+        mission.order?.lastOrderStatus?.label ??
+        (useShortLabel ? visual.shortLabel : visual.label);
+
     final double padH = dense ? 8 : 10;
     final double padV = dense ? 3 : 4;
     final double iconSize = dense ? 12 : 14;
@@ -52,18 +47,18 @@ class MissionStatusChip extends StatelessWidget {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: padH, vertical: padV),
       decoration: BoxDecoration(
-        color: visual.color.withValues(alpha: 0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(visual.icon, size: iconSize, color: visual.color),
+          Icon(visual.icon, size: iconSize, color: color),
           SizedBox(width: dense ? 4 : 6),
           Text(
             text,
             style: TextStyle(
-              color: visual.color,
+              color: color,
               fontSize: fontSize,
               fontWeight: FontWeight.w600,
             ),

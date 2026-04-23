@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/mission_status.dart';
 import 'package:rider/core/widgets/toastification.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 import 'package:rider/services/navigation_service.dart';
 import 'package:rider/providers/mission_provider.dart';
 import 'package:rider/screens/delivery_details/widgets/delivery_collapsed_card.dart';
@@ -217,15 +218,20 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen> {
       _routeDistance = mission!.distance!;
     }
 
-    final MissionStatusVisual status =
+    final MissionStatusVisual visual =
         MissionStatusVisual.resolve(mission?.status);
+    // Couleur pilotee par le backend (`last_delivery_status.color`).
+    // Fallback neutre du design system si null (pas de switch local).
+    final Color statusColor = mission?.statusColor ?? ZeetColors.inkMuted;
     // Edge case : pas de statut (mission encore en chargement) -> on remplace
     // le label « inconnu » par « Chargement... » pour rester coherent avec
     // l'ancien helper local, sans toucher au mapping global.
     final String statusLabel = (mission?.status == null ||
             (mission?.status?.isEmpty ?? true))
         ? 'Chargement...'
-        : status.label;
+        : (mission?.lastDeliveryStatus?.label ??
+            mission?.order?.lastOrderStatus?.label ??
+            visual.label);
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -301,7 +307,7 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen> {
                                   if (mission != null)
                                     DeliveryInfoCard(
                                       mission: mission,
-                                      statusColor: status.color,
+                                      statusColor: statusColor,
                                       statusText: statusLabel,
                                       isActionLoading:
                                           detailState.isActionLoading,

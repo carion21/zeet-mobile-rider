@@ -16,6 +16,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/icons.dart';
+import 'package:rider/core/widgets/freshness/zeet_freshness_chip.dart';
 import 'package:rider/models/rating_model.dart';
 import 'package:rider/providers/ratings_provider.dart';
 import 'package:rider/services/navigation_service.dart';
@@ -30,6 +31,10 @@ class RatingsScreen extends ConsumerStatefulWidget {
 
 class _RatingsScreenState extends ConsumerState<RatingsScreen> {
   final ScrollController _scrollController = ScrollController();
+
+  // Clé pour notifier la chip freshness d'un refresh externe
+  // (pull-to-refresh, retry).
+  final GlobalKey<ZeetFreshnessChipLocalState> _freshKey = GlobalKey();
 
   @override
   void initState() {
@@ -55,9 +60,10 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
     }
   }
 
-  Future<void> _onRefresh() async {
+  Future<void> _refreshAll() async {
     HapticFeedback.lightImpact();
     await ref.read(ratingsProvider.notifier).refresh();
+    _freshKey.currentState?.bump();
   }
 
   @override
@@ -89,10 +95,21 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
           ),
         ),
         centerTitle: true,
+        actions: <Widget>[
+          Padding(
+            padding: EdgeInsets.only(right: 8.w),
+            child: Center(
+              child: ZeetFreshnessChipLocal(
+                key: _freshKey,
+                onRefresh: _refreshAll,
+              ),
+            ),
+          ),
+        ],
       ),
       body: RefreshIndicator(
         color: AppColors.primary,
-        onRefresh: _onRefresh,
+        onRefresh: _refreshAll,
         child: _buildBody(
           state,
           textColor,
@@ -503,7 +520,7 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
         ),
         SizedBox(height: 16.h),
         TextButton(
-          onPressed: _onRefresh,
+          onPressed: _refreshAll,
           child: Text(
             'Reessayer',
             style: TextStyle(

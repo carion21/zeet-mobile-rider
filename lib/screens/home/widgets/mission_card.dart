@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/icons.dart';
-import 'package:rider/core/constants/mission_status.dart';
 import 'package:rider/models/mission_model.dart';
 import 'package:rider/services/navigation_service.dart';
 import 'package:rider/widgets/mission_status_chip.dart';
@@ -28,9 +27,6 @@ class MissionCard extends StatelessWidget {
     final textLightColor =
         isDarkMode ? AppColors.darkTextLight : AppColors.textLight;
     final surfaceColor = isDarkMode ? AppColors.darkSurface : Colors.white;
-
-    final MissionStatusVisual visual =
-        MissionStatusVisual.resolve(mission.status);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -74,7 +70,7 @@ class MissionCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  MissionStatusChip(visual: visual, dense: true),
+                  MissionStatusChip(mission: mission, dense: true),
                 ],
               ),
               const SizedBox(height: 12),

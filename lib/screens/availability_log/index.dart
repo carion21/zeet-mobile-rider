@@ -16,6 +16,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
 import 'package:zeet_ui/zeet_ui.dart';
 
+import 'package:rider/core/widgets/freshness/zeet_freshness_chip.dart';
 import 'package:rider/models/availability_log_model.dart';
 import 'package:rider/providers/availability_log_provider.dart';
 import 'package:rider/services/navigation_service.dart';
@@ -31,6 +32,10 @@ class AvailabilityLogScreen extends ConsumerStatefulWidget {
 class _AvailabilityLogScreenState
     extends ConsumerState<AvailabilityLogScreen> {
   final ScrollController _scrollController = ScrollController();
+
+  // Clé pour notifier la chip freshness d'un refresh externe
+  // (pull-to-refresh, refresh button, retry).
+  final GlobalKey<ZeetFreshnessChipLocalState> _freshKey = GlobalKey();
 
   @override
   void initState() {
@@ -56,8 +61,10 @@ class _AvailabilityLogScreenState
     }
   }
 
-  Future<void> _onRefresh() =>
-      ref.read(availabilityLogProvider.notifier).refresh();
+  Future<void> _refreshAll() async {
+    await ref.read(availabilityLogProvider.notifier).refresh();
+    _freshKey.currentState?.bump();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,8 +91,17 @@ class _AvailabilityLogScreenState
                 ? null
                 : () {
                     HapticFeedback.lightImpact();
-                    ref.read(availabilityLogProvider.notifier).refresh();
+                    _refreshAll();
                   },
+          ),
+          Padding(
+            padding: EdgeInsets.only(right: 8.w),
+            child: Center(
+              child: ZeetFreshnessChipLocal(
+                key: _freshKey,
+                onRefresh: _refreshAll,
+              ),
+            ),
           ),
         ],
       ),
@@ -104,7 +120,7 @@ class _AvailabilityLogScreenState
           title: 'Erreur de chargement',
           description: state.errorMessage!,
           actionLabel: 'Réessayer',
-          onAction: () => ref.read(availabilityLogProvider.notifier).load(),
+          onAction: _refreshAll,
         ),
       );
     }
@@ -123,7 +139,7 @@ class _AvailabilityLogScreenState
     }
 
     return RefreshIndicator(
-      onRefresh: _onRefresh,
+      onRefresh: _refreshAll,
       color: Theme.of(context).colorScheme.primary,
       child: ListView.separated(
         controller: _scrollController,

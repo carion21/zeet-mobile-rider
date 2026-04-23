@@ -26,6 +26,7 @@ import 'package:intl/intl.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:rider/core/constants/sizes.dart';
+import 'package:rider/core/widgets/freshness/zeet_freshness_chip.dart';
 import 'package:rider/models/earnings_model.dart';
 import 'package:rider/models/rider_stats_model.dart';
 import 'package:rider/providers/earnings_provider.dart';
@@ -47,6 +48,10 @@ class StatsScreen extends ConsumerStatefulWidget {
 
 class _StatsScreenState extends ConsumerState<StatsScreen> {
   _StatsPreset _preset = _StatsPreset.month;
+
+  // Clé pour notifier la chip freshness d'un refresh externe
+  // (pull-to-refresh, retry, changement de preset).
+  final GlobalKey<ZeetFreshnessChipLocalState> _freshKey = GlobalKey();
 
   @override
   void initState() {
@@ -125,9 +130,10 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           .read(earningsSummaryProvider.notifier)
           .load(period: _earningsPeriodForPreset(preset)),
     ]);
+    _freshKey.currentState?.bump();
   }
 
-  Future<void> _onRefresh() async {
+  Future<void> _refreshAll() async {
     HapticFeedback.lightImpact();
     await Future.wait([
       _loadForCurrentPreset(),
@@ -135,6 +141,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           .read(earningsSummaryProvider.notifier)
           .load(period: _earningsPeriodForPreset(_preset)),
     ]);
+    _freshKey.currentState?.bump();
   }
 
   // ---------------------------------------------------------------------------
@@ -191,11 +198,20 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                 );
               },
             ),
+          Padding(
+            padding: EdgeInsets.only(right: 8.w),
+            child: Center(
+              child: ZeetFreshnessChipLocal(
+                key: _freshKey,
+                onRefresh: _refreshAll,
+              ),
+            ),
+          ),
         ],
       ),
       body: RefreshIndicator(
         color: AppColors.primary,
-        onRefresh: _onRefresh,
+        onRefresh: _refreshAll,
         child: _buildBody(
           statsState,
           summaryState,
@@ -285,7 +301,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           ),
           SizedBox(height: 16.h),
           TextButton(
-            onPressed: _onRefresh,
+            onPressed: _refreshAll,
             child: Text(
               'Reessayer',
               style: TextStyle(

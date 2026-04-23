@@ -25,12 +25,6 @@ abstract class AppColors {
   static const Color danger = ZeetColors.danger;
   static const Color info = ZeetColors.info;
 
-  /// Statuts de mission rider — tous basés sur la palette sémantique.
-  static const Color statusNew = ZeetColors.warning;
-  static const Color statusAccepted = ZeetColors.info;
-  static const Color statusPickedUp = ZeetColors.primary;
-  static const Color statusDelivered = ZeetColors.success;
-
   /// @deprecated Utiliser [danger]
   static const Color error = ZeetColors.danger;
 

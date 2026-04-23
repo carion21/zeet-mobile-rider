@@ -24,3 +24,17 @@ final connectivityStatusProvider = StreamProvider<bool>((ref) {
   ref.onDispose(zc.dispose);
   return zc.stream;
 });
+
+/// Raccourci synchrone : retourne `true` si le réseau est online, ou `true`
+/// par défaut tant que le stream n'a pas encore émis (fail-open — on ne
+/// bloque jamais l'utilisateur sur un faux positif au boot).
+///
+/// Nommé `isNetworkOnlineProvider` pour ne pas entrer en collision avec
+/// `isOnlineProvider` du `status_provider.dart` qui, lui, représente le
+/// statut métier du rider (toggle online/offline pour recevoir des
+/// missions). Les deux sont orthogonaux : un rider peut être offline
+/// "métier" tout en ayant le réseau, et inversement.
+final isNetworkOnlineProvider = Provider<bool>((ref) {
+  final async = ref.watch(connectivityStatusProvider);
+  return async.valueOrNull ?? true;
+});

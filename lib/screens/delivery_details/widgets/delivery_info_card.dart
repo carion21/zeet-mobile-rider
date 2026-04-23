@@ -419,9 +419,13 @@ class _ActionButtons extends ConsumerWidget {
     switch (key) {
       case 'accept':
       case 'accept-mission':
+        // Bleu `info` (pas vert) : accept → statut `accepted`, pas final.
+        // Garder `success` pour `deliver` (état terminal vert) évite que le
+        // rider swipe/tape par réflexe sans réaliser l'étape — cf. skill
+        // neuro-ux "couleur = signal sémantique".
         return _ActionBinding(
           isPrimary: true,
-          color: ZeetColors.success,
+          color: ZeetColors.info,
           onPressed: onAccept,
           fallbackLabel: 'Accepter la livraison',
         );
@@ -469,7 +473,7 @@ class _ActionButtons extends ConsumerWidget {
           children: [
             _PrimaryButton(
                 label: 'Accepter la livraison',
-                color: ZeetColors.success,
+                color: ZeetColors.info,
                 onPressed: onAccept),
             const SizedBox(height: 10),
             _OutlineButton(label: 'Refuser', onPressed: onReject),

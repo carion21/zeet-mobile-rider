@@ -5,9 +5,37 @@
 /// L'API peut renvoyer des structures variables (int ou objet pour les relations).
 library;
 
+import 'package:flutter/material.dart';
+import 'package:rider/core/utils/hex_color.dart';
+
 // ---------------------------------------------------------------------------
 // Sous-objets
 // ---------------------------------------------------------------------------
+
+/// Statut enrichi renvoye par le core API sous la forme
+/// `{id, label, value, color: "#RRGGBB"}`. Utilise pour `last_delivery_status`,
+/// `last_order_status`, etc.
+class MissionStatus {
+  final int? id;
+  final String? label;
+  final String? value;
+
+  /// Couleur resolue depuis `json['color']`. `null` si backend ne fournit rien
+  /// ou en cas de parsing invalide — c'est l'appelant qui applique son
+  /// fallback du design system.
+  final Color? color;
+
+  const MissionStatus({this.id, this.label, this.value, this.color});
+
+  factory MissionStatus.fromJson(Map<String, dynamic> json) {
+    return MissionStatus(
+      id: (json['id'] as num?)?.toInt(),
+      label: json['label'] as String?,
+      value: json['value'] as String?,
+      color: hexToColor(json['color'] as String?),
+    );
+  }
+}
 
 /// Adresse (pickup ou dropoff).
 class MissionAddress {
@@ -185,6 +213,11 @@ class MissionOrder {
   final int? id;
   final String? reference;
   final String? status;
+
+  /// Statut enrichi `last_order_status` quand le backend le renvoie (id,
+  /// label, value, color). La couleur est la source de verite pour l'UI.
+  final MissionStatus? lastOrderStatus;
+
   final MissionPartner? partner;
   final MissionCustomer? customer;
   final List<MissionOrderItem> items;
@@ -196,6 +229,7 @@ class MissionOrder {
     this.id,
     this.reference,
     this.status,
+    this.lastOrderStatus,
     this.partner,
     this.customer,
     this.items = const [],
@@ -239,10 +273,17 @@ class MissionOrder {
       amounts = MissionAmounts.fromJson(json);
     }
 
+    MissionStatus? lastOrderStatus;
+    final losRaw = json['last_order_status'];
+    if (losRaw is Map<String, dynamic>) {
+      lastOrderStatus = MissionStatus.fromJson(losRaw);
+    }
+
     return MissionOrder(
       id: json['id'] as int?,
       reference: json['reference'] as String? ?? json['order_number'] as String?,
-      status: json['status'] as String?,
+      status: json['status'] as String? ?? lastOrderStatus?.value,
+      lastOrderStatus: lastOrderStatus,
       partner: partner,
       customer: customer,
       items: items,
@@ -261,6 +302,12 @@ class MissionOrder {
 class Mission {
   final int id;
   final String? status;
+
+  /// Statut enrichi `last_delivery_status` quand le backend le renvoie (id,
+  /// label, value, color). La couleur est la source de verite pour l'UI —
+  /// on ne derive plus de couleur localement depuis `value`.
+  final MissionStatus? lastDeliveryStatus;
+
   final MissionOrder? order;
   final MissionAddress? pickupAddress;
   final MissionAddress? dropoffAddress;
@@ -275,6 +322,7 @@ class Mission {
   const Mission({
     required this.id,
     this.status,
+    this.lastDeliveryStatus,
     this.order,
     this.pickupAddress,
     this.dropoffAddress,
@@ -286,6 +334,17 @@ class Mission {
     this.pickupOtp,
     this.deliveryOtp,
   });
+
+  /// Raccourci : couleur du statut livraison (API), sinon statut order, sinon `null`.
+  Color? get statusColor =>
+      lastDeliveryStatus?.color ?? order?.lastOrderStatus?.color;
+
+  /// Raccourci : label affichable du statut livraison (API), fallback sur la
+  /// valeur brute.
+  String? get statusLabel =>
+      lastDeliveryStatus?.label ??
+      order?.lastOrderStatus?.label ??
+      (status == null || status!.isEmpty ? null : status);
 
   /// Nom du restaurant (raccourci).
   String get partnerName => order?.partner?.name ?? 'Restaurant';
@@ -350,9 +409,17 @@ class Mission {
       dropoffAddress = MissionAddress.fromJson(dropoffRaw);
     }
 
+    // Statut enrichi livraison.
+    MissionStatus? lastDeliveryStatus;
+    final ldsRaw = json['last_delivery_status'];
+    if (ldsRaw is Map<String, dynamic>) {
+      lastDeliveryStatus = MissionStatus.fromJson(ldsRaw);
+    }
+
     return Mission(
       id: id,
-      status: json['status'] as String?,
+      status: json['status'] as String? ?? lastDeliveryStatus?.value,
+      lastDeliveryStatus: lastDeliveryStatus,
       order: order,
       pickupAddress: pickupAddress,
       dropoffAddress: dropoffAddress,
@@ -369,6 +436,7 @@ class Mission {
   Mission copyWith({
     int? id,
     String? status,
+    MissionStatus? lastDeliveryStatus,
     MissionOrder? order,
     MissionAddress? pickupAddress,
     MissionAddress? dropoffAddress,
@@ -383,6 +451,7 @@ class Mission {
     return Mission(
       id: id ?? this.id,
       status: status ?? this.status,
+      lastDeliveryStatus: lastDeliveryStatus ?? this.lastDeliveryStatus,
       order: order ?? this.order,
       pickupAddress: pickupAddress ?? this.pickupAddress,
       dropoffAddress: dropoffAddress ?? this.dropoffAddress,
