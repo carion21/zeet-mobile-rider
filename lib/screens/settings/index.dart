@@ -4,10 +4,12 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/icons.dart';
+import 'package:rider/core/constants/links.dart';
 import 'package:rider/core/widgets/toastification.dart';
 import 'package:rider/screens/settings/widgets/notification_preferences_card.dart';
 import 'package:rider/services/navigation_service.dart';
 import 'package:rider/providers/theme_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -199,12 +201,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   title: 'Conditions d\'utilisation',
                   subtitle: 'Voir les conditions',
                   icon: 'document',
-                  onTap: () {
-                    AppToast.showInfo(
-                      context: context,
-                      message: 'Page en cours de développement',
-                    );
-                  },
+                  onTap: () => _openExternal(ZeetLinks.terms),
                   textColor: textColor,
                   textLightColor: textLightColor,
                 ),
@@ -213,12 +210,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   title: 'Politique de confidentialité',
                   subtitle: 'Voir la politique',
                   icon: 'privacy',
-                  onTap: () {
-                    AppToast.showInfo(
-                      context: context,
-                      message: 'Page en cours de développement',
-                    );
-                  },
+                  onTap: () => _openExternal(ZeetLinks.privacy),
                   textColor: textColor,
                   textLightColor: textLightColor,
                 ),
@@ -244,6 +236,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _openExternal(String url) async {
+    final uri = Uri.parse(url);
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && mounted) {
+      AppToast.showError(
+        context: context,
+        message: 'Impossible d\'ouvrir le lien.',
+      );
+    }
   }
 
   Widget _buildSettingsCard(
