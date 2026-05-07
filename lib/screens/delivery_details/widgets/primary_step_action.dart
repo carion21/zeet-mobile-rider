@@ -19,6 +19,7 @@
 // ou deliver). Le widget ne change pas la state machine ni les flux.
 
 import 'package:flutter/material.dart';
+import 'package:rider/screens/delivery_details/steps/step_focus.dart';
 import 'package:zeet_ui/zeet_ui.dart';
 
 /// État cible du flow rider — pilote label et couleur du swipe.
@@ -53,20 +54,19 @@ class PrimaryStepAction extends StatelessWidget {
     this.height = 64,
   });
 
+  /// Source de vérité unique : [DeliveryStepFocus].
+  /// Recup → collect, Trajet → deliver, autres → null (pas de slide).
   PrimaryStepActionKind? _kindFor(String? raw) {
-    if (raw == null || raw.isEmpty) return null;
-    final s = raw.replaceAll('_', '-');
-    switch (s) {
-      case 'accepted':
+    final focus = DeliveryStepFocusX.fromStatus(raw);
+    switch (focus) {
+      case DeliveryStepFocus.recup:
         return PrimaryStepActionKind.collect;
-      case 'collected':
-      case 'collecting':
-      case 'on-the-way':
-      case 'picked-up':
-      case 'delivering':
+      case DeliveryStepFocus.trajet:
         return PrimaryStepActionKind.deliver;
+      case DeliveryStepFocus.offer:
+      case DeliveryStepFocus.terminal:
+        return null;
     }
-    return null;
   }
 
   @override

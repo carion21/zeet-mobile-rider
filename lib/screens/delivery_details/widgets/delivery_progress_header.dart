@@ -16,6 +16,7 @@
 // Stateless. Add-only — n'impacte pas la state machine ni les actions.
 
 import 'package:flutter/material.dart';
+import 'package:rider/screens/delivery_details/steps/step_focus.dart';
 import 'package:zeet_ui/zeet_ui.dart';
 
 class DeliveryProgressHeader extends StatelessWidget {
@@ -32,31 +33,22 @@ class DeliveryProgressHeader extends StatelessWidget {
   });
 
   /// Index du dernier segment franchi (-1 si aucun, 0 = Récup, 1 = Trajet,
-  /// 2 = Livraison). On utilise le terme "completed" : un segment >= index
-  /// est dit "actif" (orange) sinon "inactif" (gris).
+  /// 2 = Livraison). Délègue à [DeliveryStepFocus] pour la source de vérité.
+  /// `delivered` est terminal mais avec progression complète → traité ici.
   int _stepIndex(String? raw) {
     if (raw == null || raw.isEmpty) return -1;
-    final s = raw.replaceAll('_', '-');
-    switch (s) {
-      case 'assigned':
-      case 'pending':
+    if (raw.replaceAll('_', '-') == 'delivered') return 2;
+    final focus = DeliveryStepFocusX.fromStatus(raw);
+    switch (focus) {
+      case DeliveryStepFocus.offer:
         return -1;
-      case 'accepted':
-        return 0; // Récup en cours
-      case 'collected':
-      case 'collecting':
-      case 'on-the-way':
-      case 'picked-up':
-      case 'delivering':
-        return 1; // Trajet en cours
-      case 'delivered':
-        return 2; // Livré
-      case 'not-delivered':
-      case 'cancelled':
-      case 'canceled':
-        return -1; // pas de progression visuelle (échec)
+      case DeliveryStepFocus.recup:
+        return 0;
+      case DeliveryStepFocus.trajet:
+        return 1;
+      case DeliveryStepFocus.terminal:
+        return -1; // not-delivered/cancelled — pas de progression
     }
-    return -1;
   }
 
   @override

@@ -17,9 +17,13 @@ import 'package:rider/models/mission_model.dart';
 import 'package:rider/models/rider_action_model.dart';
 import 'package:rider/providers/mission_logs_provider.dart';
 import 'package:rider/providers/rider_actions_provider.dart';
+import 'package:rider/screens/delivery_details/steps/step_focus.dart';
+import 'package:rider/screens/delivery_details/steps/step_offer_actions.dart';
+import 'package:rider/screens/delivery_details/steps/step_recup_actions.dart';
+import 'package:rider/screens/delivery_details/steps/step_terminal_actions.dart';
+import 'package:rider/screens/delivery_details/steps/step_trajet_actions.dart';
 import 'package:rider/screens/delivery_details/widgets/delivery_call_actions.dart';
 import 'package:rider/screens/delivery_details/widgets/delivery_navigate_button.dart';
-import 'package:rider/screens/delivery_details/widgets/mission_logs_sheet.dart';
 import 'package:zeet_ui/zeet_ui.dart';
 
 /// Vrai si le statut delivery est terminal (livre / non-livre / annule).
@@ -417,51 +421,12 @@ class _ActionButtons extends ConsumerWidget {
       );
     }
 
-    // Etat terminal : pas d'action API a charger. CTA pluriel
-    // (skill `zeet-3-clicks-rule`) — "Historique" outline (acces 1 tap a
-    // l'audit trail sans devoir trouver l'icone discrete top-right) +
-    // "Retour" textuel discret. "Retour" reste neutre — jamais teinte
-    // par la couleur du statut (skill `zeet-design-system`).
+    // Step TERMINAL — délègue à StepTerminalActions.
+    // Plan §4.P4.1 — refonte 3 step-screens.
     if (_isTerminal(status)) {
-      return Column(
-        key: const ValueKey('buttons_final'),
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: OutlinedButton.icon(
-              onPressed: () => showMissionLogsSheet(
-                ref.context,
-                missionId: mission.id.toString(),
-              ),
-              icon: const Icon(Icons.history_rounded, size: 18),
-              label: Text(
-                'Voir l\'historique',
-                style: TextStyle(
-                  fontSize: 15.sp,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: onClose,
-            child: Text(
-              'Retour',
-              style: TextStyle(
-                fontSize: 14.sp,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textLight,
-              ),
-            ),
-          ),
-        ],
+      return StepTerminalActions(
+        missionId: mission.id.toString(),
+        onClose: onClose,
       );
     }
 
@@ -587,57 +552,31 @@ class _ActionButtons extends ConsumerWidget {
   }
 
   /// Fallback hardcode si l'endpoint actions echoue (offline, 500...).
+  /// Délègue au step widget approprié selon `DeliveryStepFocus`.
+  /// Plan §4.P4.1 — refonte 3 step-screens.
   Widget _buildHardcodedFallback(String status) {
-    switch (status) {
-      case 'assigned':
-      case 'pending':
-        return Column(
-          key: const ValueKey('buttons_assigned'),
-          children: [
-            _PrimaryButton(
-                label: 'Accepter la livraison',
-                color: ZeetColors.info,
-                onPressed: onAccept),
-            const SizedBox(height: 10),
-            _OutlineButton(label: 'Refuser', onPressed: onReject),
-          ],
+    final focus = DeliveryStepFocusX.fromStatus(status);
+    switch (focus) {
+      case DeliveryStepFocus.offer:
+        return StepOfferActions(
+          onAccept: onAccept,
+          onReject: onReject,
         );
-      case 'accepted':
-        return Column(
-          key: const ValueKey('buttons_accepted'),
-          children: [
-            if (!hidePrimaryStepActions) ...[
-              _PrimaryButton(
-                  label: "J'ai récupéré la commande",
-                  color: AppColors.primary,
-                  onPressed: onCollect),
-              const SizedBox(height: 10),
-            ],
-            _OutlineButton(
-                label: 'Signaler un souci', onPressed: onNotDelivered),
-          ],
+      case DeliveryStepFocus.recup:
+        return StepRecupActions(
+          onCollect: onCollect,
+          onNotDelivered: onNotDelivered,
+          hidePrimary: hidePrimaryStepActions,
         );
-      case 'collected':
-      case 'on-the-way':
-      case 'on_the_way':
-      case 'delivering':
-      case 'collecting':
-      case 'picked_up':
-        return Column(
-          key: const ValueKey('buttons_delivering'),
-          children: [
-            if (!hidePrimaryStepActions) ...[
-              _PrimaryButton(
-                  label: 'Livraison effectuée',
-                  color: ZeetColors.success,
-                  onPressed: onDeliver),
-              const SizedBox(height: 10),
-            ],
-            _OutlineButton(
-                label: 'Livraison impossible', onPressed: onNotDelivered),
-          ],
+      case DeliveryStepFocus.trajet:
+        return StepTrajetActions(
+          onDeliver: onDeliver,
+          onNotDelivered: onNotDelivered,
+          hidePrimary: hidePrimaryStepActions,
         );
-      default:
+      case DeliveryStepFocus.terminal:
+        // Terminal traité plus haut dans `_resolveChild` via
+        // `StepTerminalActions`. Si on arrive ici, statut inconnu → rien.
         return const SizedBox.shrink(key: ValueKey('buttons_none'));
     }
   }
