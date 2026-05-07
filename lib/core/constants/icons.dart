@@ -100,6 +100,7 @@ class IconManager {
     'language': Icons.language,
     'document': Icons.description,
     'privacy': Icons.privacy_tip,
+    'shield': Icons.shield_outlined,
     'chart': Icons.bar_chart_outlined,
   };
 
@@ -200,6 +201,7 @@ class IconManager {
     'language': CupertinoIcons.globe,
     'document': CupertinoIcons.doc_text,
     'privacy': CupertinoIcons.lock_shield,
+    'shield': CupertinoIcons.shield,
     'chart': CupertinoIcons.chart_bar,
   };
 

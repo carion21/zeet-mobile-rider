@@ -178,6 +178,140 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
             SizedBox(height: 24.h),
 
+            // Section Aide & support — pages publiques hébergées sur
+            // zeet.geasscorp.com. Ouverture en navigateur externe pour
+            // respecter App Review Guideline 5.1.1.
+            _buildSectionTitle('Aide & support', textColor),
+            SizedBox(height: 12.h),
+            _buildSettingsCard(
+              surfaceColor,
+              textColor,
+              textLightColor,
+              isDarkMode,
+              children: [
+                _buildTapOption(
+                  title: 'Aide & FAQ',
+                  subtitle: 'Centre d\'aide en ligne',
+                  icon: 'help',
+                  onTap: () => _openExternal(ZeetLinks.support),
+                  textColor: textColor,
+                  textLightColor: textLightColor,
+                ),
+                Divider(height: 1, color: textLightColor.withValues(alpha: 0.1)),
+                _buildTapOption(
+                  title: 'Nous contacter',
+                  subtitle: 'Support ZEET',
+                  icon: 'message',
+                  onTap: () => _openExternal(ZeetLinks.supportContact),
+                  textColor: textColor,
+                  textLightColor: textLightColor,
+                ),
+                Divider(height: 1, color: textLightColor.withValues(alpha: 0.1)),
+                _buildTapOption(
+                  title: 'Sécurité & confiance',
+                  subtitle: 'Engagements ZEET',
+                  icon: 'shield',
+                  onTap: () => _openExternal(ZeetLinks.safety),
+                  textColor: textColor,
+                  textLightColor: textLightColor,
+                ),
+                Divider(height: 1, color: textLightColor.withValues(alpha: 0.1)),
+                _buildTapOption(
+                  title: 'Règles communauté',
+                  subtitle: 'Charte ZEET',
+                  icon: 'document',
+                  onTap: () => _openExternal(ZeetLinks.communityRules),
+                  textColor: textColor,
+                  textLightColor: textLightColor,
+                ),
+              ],
+            ),
+
+            SizedBox(height: 24.h),
+
+            // Section Compte
+            _buildSectionTitle('Compte', textColor),
+            SizedBox(height: 12.h),
+            _buildSettingsCard(
+              surfaceColor,
+              textColor,
+              textLightColor,
+              isDarkMode,
+              children: [
+                _buildTapOption(
+                  title: 'Supprimer mon compte',
+                  subtitle: 'Procédure RGPD',
+                  icon: 'delete_outline',
+                  onTap: () => _openExternal(ZeetLinks.accountDeletion),
+                  textColor: textColor,
+                  textLightColor: textLightColor,
+                ),
+              ],
+            ),
+
+            SizedBox(height: 24.h),
+
+            // Section Légal — pages publiques hébergées sur
+            // zeet.geasscorp.com (URLs centralisées dans
+            // core/constants/links.dart). Ouverture en navigateur
+            // externe pour respecter App Review Guideline 5.1.1.
+            _buildSectionTitle('Légal', textColor),
+            SizedBox(height: 12.h),
+            _buildSettingsCard(
+              surfaceColor,
+              textColor,
+              textLightColor,
+              isDarkMode,
+              children: [
+                _buildTapOption(
+                  title: 'Politique de confidentialité',
+                  subtitle: 'Données personnelles',
+                  icon: 'privacy',
+                  onTap: () => _openExternal(ZeetLinks.privacy),
+                  textColor: textColor,
+                  textLightColor: textLightColor,
+                ),
+                Divider(height: 1, color: textLightColor.withValues(alpha: 0.1)),
+                _buildTapOption(
+                  title: 'Conditions d\'utilisation',
+                  subtitle: 'CGU',
+                  icon: 'document',
+                  onTap: () => _openExternal(ZeetLinks.terms),
+                  textColor: textColor,
+                  textLightColor: textLightColor,
+                ),
+                Divider(height: 1, color: textLightColor.withValues(alpha: 0.1)),
+                _buildTapOption(
+                  title: 'Conditions générales de vente',
+                  subtitle: 'CGV',
+                  icon: 'document',
+                  onTap: () => _openExternal(ZeetLinks.salesTerms),
+                  textColor: textColor,
+                  textLightColor: textLightColor,
+                ),
+                Divider(height: 1, color: textLightColor.withValues(alpha: 0.1)),
+                _buildTapOption(
+                  title: 'Politique cookies',
+                  subtitle: 'Gestion cookies',
+                  icon: 'document',
+                  onTap: () => _openExternal(ZeetLinks.cookies),
+                  textColor: textColor,
+                  textLightColor: textLightColor,
+                ),
+                Divider(height: 1, color: textLightColor.withValues(alpha: 0.1)),
+                _buildTapOption(
+                  title: 'Mentions légales',
+                  subtitle: 'Éditeur ZEET',
+                  icon: 'info',
+                  onTap: () => _openExternal(ZeetLinks.legalNotice),
+                  textColor: textColor,
+                  textLightColor: textLightColor,
+                ),
+              ],
+            ),
+
+            SizedBox(height: 24.h),
+
             // Section À propos
             _buildSectionTitle('À propos', textColor),
             SizedBox(height: 12.h),
@@ -187,6 +321,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               textLightColor,
               isDarkMode,
               children: [
+                _buildTapOption(
+                  title: 'À propos de ZEET',
+                  subtitle: 'Notre mission',
+                  icon: 'info',
+                  onTap: () => _openExternal(ZeetLinks.about),
+                  textColor: textColor,
+                  textLightColor: textLightColor,
+                ),
+                Divider(height: 1, color: textLightColor.withValues(alpha: 0.1)),
                 _buildTapOption(
                   title: 'Version de l\'application',
                   subtitle: '1.0.0',
@@ -222,6 +365,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _openExternal(String url) async {
+    final uri = Uri.parse(url);
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && mounted) {
+      AppToast.showError(
+        context: context,
+        message: 'Impossible d\'ouvrir le lien.',
+      );
+    }
   }
 
   Widget _buildSectionTitle(String title, Color textColor) {
