@@ -171,7 +171,7 @@ class _ZeetFreshnessChipState extends State<ZeetFreshnessChip>
               Text(
                 _label(s),
                 style: TextStyle(
-                  fontSize: 11.sp,
+                  fontSize: 12.sp,
                   fontWeight: FontWeight.w600,
                   color: textColor,
                   letterSpacing: 0.2,
@@ -272,8 +272,8 @@ class _PulseDot extends StatelessWidget {
       child: AnimatedBuilder(
         animation: controller,
         builder: (_, __) {
-          // Alpha 0.4 → 1.0 en easing doux (springGentle équivalent ease).
-          final double t = Curves.easeInOut.transform(controller.value);
+          // Alpha 0.4 → 1.0 en easing standard ZEET.
+          final double t = ZeetCurves.standard.transform(controller.value);
           final double alpha = 0.4 + 0.6 * t;
           return Container(
             decoration: BoxDecoration(

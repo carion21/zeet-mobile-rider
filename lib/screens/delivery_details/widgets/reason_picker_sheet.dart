@@ -14,7 +14,6 @@
 // Renvoie un `ReasonPickerResult` ou null si annule.
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:zeet_ui/zeet_ui.dart';
@@ -48,7 +47,7 @@ class ReasonPickerSheet {
     ],
     bool includeGeo = true,
   }) async {
-    HapticFeedback.heavyImpact();
+    ZeetHaptics.heavy();
     return showModalBottomSheet<ReasonPickerResult>(
       context: context,
       isScrollControlled: true,
@@ -188,7 +187,7 @@ class _ReasonSheetState extends State<_ReasonSheet> {
                           label: p,
                           selected: _selectedPreset == p,
                           onTap: () {
-                            HapticFeedback.selectionClick();
+                            ZeetHaptics.tap();
                             setState(() {
                               _selectedPreset =
                                   (_selectedPreset == p) ? null : p;

@@ -114,14 +114,14 @@ class ProfileEditNotifier extends StateNotifier<ProfileEditState> {
       state = state.copyWith(
         isSaving: false,
         errorMessage: isEmailConflict
-            ? 'Cet email est deja utilise par un autre compte.'
+            ? 'Cet email est déjà utilisé par un autre compte.'
             : e.message,
         emailAlreadyUsed: isEmailConflict,
       );
       return {
         'success': false,
         'message': isEmailConflict
-            ? 'Cet email est deja utilise par un autre compte.'
+            ? 'Cet email est déjà utilisé par un autre compte.'
             : e.message,
         'emailAlreadyUsed': isEmailConflict,
       };

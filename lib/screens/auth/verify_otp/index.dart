@@ -9,6 +9,7 @@ import 'package:rider/core/constants/icons.dart';
 import 'package:rider/core/widgets/toastification.dart';
 import 'package:rider/services/navigation_service.dart';
 import 'package:rider/services/permissions_service.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 import 'controllers.dart';
 
 class VerifyOtpScreen extends ConsumerStatefulWidget {
@@ -75,7 +76,7 @@ class _VerifyOtpScreenState extends ConsumerState<VerifyOtpScreen> {
     if (_controller.otpCode.length != VerifyOtpController.otpLength) {
       AppToast.showWarning(
         context: context,
-        message: "Veuillez saisir le code a ${VerifyOtpController.otpLength} chiffres complet",
+        message: "Saisis le code à ${VerifyOtpController.otpLength} chiffres complet",
       );
       return;
     }
@@ -88,17 +89,17 @@ class _VerifyOtpScreenState extends ConsumerState<VerifyOtpScreen> {
     setState(() => _controller.isLoading = false);
 
     if (result['success']) {
-      AppToast.showSuccess(context: context, message: "Verification reussie !");
+      AppToast.showSuccess(context: context, message: "Vérification réussie !");
       final bool onboarded =
           await PermissionsService.instance.isOnboarded();
       if (!mounted) return;
       Routes.navigateAndRemoveAll(
-        onboarded ? Routes.home : Routes.permissions,
+        onboarded ? Routes.mainScaffold : Routes.permissions,
       );
     } else {
       AppToast.showError(
         context: context,
-        message: result['message'] ?? "Echec de la verification",
+        message: result['message'] ?? "Échec de la vérification",
       );
       // Vider le champ pour permettre une nouvelle saisie
       _otpController.clear();
@@ -124,13 +125,13 @@ class _VerifyOtpScreenState extends ConsumerState<VerifyOtpScreen> {
     });
 
     if (result['success']) {
-      AppToast.showSuccess(context: context, message: "Un nouveau code a ete envoye");
+      AppToast.showSuccess(context: context, message: "Un nouveau code a été envoyé");
       _otpController.clear();
       _focusNode.requestFocus();
     } else {
       AppToast.showError(
         context: context,
-        message: result['message'] ?? "Echec de l'envoi du nouveau code",
+        message: result['message'] ?? "Échec de l'envoi du nouveau code",
       );
     }
   }
@@ -143,7 +144,7 @@ class _VerifyOtpScreenState extends ConsumerState<VerifyOtpScreen> {
     final textLightColor = isDarkMode ? AppColors.darkTextLight : AppColors.textLight;
     final backgroundColor = isDarkMode ? AppColors.darkBackground : Colors.white;
     final surfaceColor = isDarkMode ? AppColors.darkSurface : Colors.white;
-    final borderColor = isDarkMode ? AppColors.darkTextLight.withValues(alpha: 0.2) : const Color(0xFFEEEEEE);
+    final borderColor = isDarkMode ? AppColors.darkTextLight.withValues(alpha: 0.2) : ZeetColors.line;
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -165,7 +166,7 @@ class _VerifyOtpScreenState extends ConsumerState<VerifyOtpScreen> {
 
               // Titre
               Text(
-                'Verification',
+                'Vérification',
                 style: TextStyle(
                   fontSize: 24.0.sp,
                   fontWeight: FontWeight.bold,
@@ -183,7 +184,7 @@ class _VerifyOtpScreenState extends ConsumerState<VerifyOtpScreen> {
                     color: textLightColor,
                   ),
                   children: [
-                    TextSpan(text: 'Un code a ${VerifyOtpController.otpLength} chiffres vous a ete envoye au '),
+                    TextSpan(text: 'Un code à ${VerifyOtpController.otpLength} chiffres t\'a été envoyé au '),
                     TextSpan(
                       text: _controller.formatPhoneNumber(),
                       style: TextStyle(

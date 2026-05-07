@@ -8,7 +8,6 @@
 // Skill `zeet-micro-copy` (tone rider direct).
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
@@ -34,7 +33,7 @@ class OfflineQueueScreen extends ConsumerWidget {
     final Color textLightColor =
         isDarkMode ? AppColors.darkTextLight : AppColors.textLight;
     final Color backgroundColor =
-        isDarkMode ? AppColors.darkBackground : const Color(0xFFF8F8F8);
+        isDarkMode ? AppColors.darkBackground : ZeetColors.surfaceAlt;
     final Color surfaceColor =
         isDarkMode ? AppColors.darkSurface : Colors.white;
 
@@ -66,7 +65,7 @@ class OfflineQueueScreen extends ConsumerWidget {
               tooltip: 'Vider les échecs',
               icon: Icon(Icons.delete_sweep_rounded, color: textColor),
               onPressed: () async {
-                HapticFeedback.mediumImpact();
+                ZeetHaptics.warning();
                 await ref
                     .read(offlineQueueServiceProvider)
                     .clearFailed();
@@ -77,7 +76,7 @@ class OfflineQueueScreen extends ConsumerWidget {
       body: RefreshIndicator(
         color: AppColors.primary,
         onRefresh: () async {
-          HapticFeedback.lightImpact();
+          ZeetHaptics.success();
           await ref.read(offlineQueueServiceProvider).sync();
         },
         child: actions.isEmpty
@@ -93,7 +92,7 @@ class OfflineQueueScreen extends ConsumerWidget {
                   textLightColor: textLightColor,
                   isDarkMode: isDarkMode,
                   onRemove: () async {
-                    HapticFeedback.selectionClick();
+                    ZeetHaptics.tap();
                     await ref
                         .read(offlineQueueServiceProvider)
                         .remove(actions[index].id);
@@ -109,7 +108,7 @@ class OfflineQueueScreen extends ConsumerWidget {
                   label: 'Réessayer ($failedCount)',
                   fullWidth: true,
                   onPressed: () async {
-                    HapticFeedback.mediumImpact();
+                    ZeetHaptics.warning();
                     final svc = ref.read(offlineQueueServiceProvider);
                     await svc.retryFailed();
                     await svc.sync();
@@ -122,39 +121,17 @@ class OfflineQueueScreen extends ConsumerWidget {
   }
 
   Widget _buildEmpty(Color textColor, Color textLightColor) {
+    // ELAE token : ZeetEmptyState — cohérent avec notifications, ratings,
+    // deliveries history (plan §4 audit ELAE systématique).
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
-      children: [
-        SizedBox(height: 0.2.sh),
-        Center(
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 32.w),
-            child: Column(
-              children: [
-                Icon(
-                  Icons.task_alt_rounded,
-                  size: 64,
-                  color: textLightColor,
-                ),
-                SizedBox(height: 16.h),
-                Text(
-                  'Tout est à jour',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: textColor,
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                SizedBox(height: 6.h),
-                Text(
-                  "Aucune action en attente. Tes livraisons sont synchronisées.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: textLightColor, fontSize: 13.sp),
-                ),
-              ],
-            ),
-          ),
+      children: const <Widget>[
+        SizedBox(height: 24),
+        ZeetEmptyState(
+          icon: Icons.task_alt_rounded,
+          title: 'Tout est à jour',
+          description:
+              "Aucune action en attente. Tes livraisons sont synchronisées.",
         ),
       ],
     );
@@ -185,8 +162,8 @@ class _ActionTile extends StatelessWidget {
     final String enqueuedRel = _relativeTime(action.enqueuedAt);
 
     return Container(
-      margin: EdgeInsets.only(bottom: 10.h),
-      padding: EdgeInsets.all(14.w),
+      margin: EdgeInsets.only(bottom: 12.h),
+      padding: EdgeInsets.all(16.w),
       decoration: BoxDecoration(
         color: surfaceColor,
         borderRadius: BorderRadius.circular(14.r),
@@ -243,7 +220,7 @@ class _ActionTile extends StatelessWidget {
           if (action.lastError != null) ...[
             SizedBox(height: 10.h),
             Container(
-              padding: EdgeInsets.all(10.w),
+              padding: EdgeInsets.all(12.w),
               decoration: BoxDecoration(
                 color: AppColors.error.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8.r),
@@ -261,7 +238,7 @@ class _ActionTile extends StatelessWidget {
             SizedBox(height: 6.h),
             Text(
               '${action.attempts} tentative${action.attempts > 1 ? 's' : ''}',
-              style: TextStyle(color: textLightColor, fontSize: 11.sp),
+              style: TextStyle(color: textLightColor, fontSize: 12.sp),
             ),
           ],
         ],

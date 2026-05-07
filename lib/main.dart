@@ -6,17 +6,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:toastification/toastification.dart';
 import 'package:zeet_ui/zeet_ui.dart';
 import 'package:rider/core/constants/themes.dart';
 import 'package:rider/core/widgets/active_missions_fab_overlay.dart';
 import 'package:rider/providers/connectivity_provider.dart';
+import 'package:rider/providers/mission_provider.dart';
 import 'package:rider/providers/offline_queue_provider.dart';
 import 'package:rider/providers/theme_provider.dart';
 import 'package:rider/screens/splash/index.dart' show consumeColdStartOfferPayload;
 import 'package:rider/services/fcm_service.dart';
 import 'package:rider/services/incoming_delivery_dispatcher.dart';
 import 'package:rider/services/local_notification_service.dart';
+import 'package:rider/services/mission_status_dispatcher.dart';
 import 'package:rider/services/navigation_service.dart';
 import 'package:rider/services/notification_launch_router.dart';
 import 'package:rider/services/offline_queue_service.dart';
@@ -25,6 +28,11 @@ import 'package:rider/services/token_service.dart';
 void main() async {
   // Assurer que l'initialisation des widgets est complète
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialiser les symboles de date pour la locale FR (intl) — sinon
+  // tout DateFormat(..., 'fr_FR').format(...) jette LocaleDataException
+  // (ex: tiles historique livraisons, availability log).
+  await initializeDateFormatting('fr_FR', null);
 
   // Initialiser le service de tokens avant le lancement de l'app
   await TokenService.instance.init();
@@ -88,9 +96,20 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     // Init FCM apres la premiere frame (le NavigatorState doit exister pour
     // pouvoir pusher l'IncomingDeliveryScreen depuis un cold-start notif tap).
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Wire FCM -> MissionStatusDispatcher : route TOUS les events rider
+      // (offer, status_changed, mission_cancelled, order_ready...) vers
+      // les bons providers (silentRefresh) et delegue les "incoming offer"
+      // a IncomingDeliveryDispatcher (sonnerie + plein ecran).
+      // Cf. plan rider §1.1 / §1.2.
       FcmService.instance.init(
         onDataMessage: (data) async {
-          IncomingDeliveryDispatcher.handleRaw(ref, data);
+          MissionStatusDispatcher.handleRaw(ref, data);
+        },
+        onMessageTap: (data) async {
+          // Tap-from-background / cold-start : meme dispatch que foreground
+          // (l'ecran pousse par IncomingDeliveryDispatcher / les screens
+          // gerent eux-memes la navigation cible).
+          MissionStatusDispatcher.handleRaw(ref, data);
         },
       );
 
@@ -154,6 +173,12 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       debugPrint('[OfflineQueue] app resumed → sync');
       unawaited(OfflineQueueService.instance.sync());
+      // Re-sync la liste des missions sans flash de skeleton (les ecrans
+      // gardent leur etat actuel, patch au succes seulement).
+      // Le detail mission est rafraichi par DeliveryDetailsScreen lui-meme
+      // via son propre WidgetsBindingObserver (Wave 2).
+      // Cf. plan rider §1.3.
+      ref.read(missionsListProvider.notifier).silentRefresh();
     }
     super.didChangeAppLifecycleState(state);
   }

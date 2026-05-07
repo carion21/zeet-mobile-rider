@@ -13,7 +13,6 @@
 // - CTA primaire : aucun (écran purement consultation)
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
@@ -66,7 +65,7 @@ class _DeliveriesHistoryScreenState
   }
 
   void _onFilterTap(DeliveryHistoryFilter filter) {
-    HapticFeedback.selectionClick();
+    ZeetHaptics.tap();
     ref.read(deliveryHistoryProvider.notifier).setFilter(filter);
   }
 
@@ -88,18 +87,19 @@ class _DeliveriesHistoryScreenState
           icon: const Icon(Icons.arrow_back_rounded),
           tooltip: 'Retour',
           onPressed: () {
-            HapticFeedback.lightImpact();
+            ZeetHaptics.success();
             Routes.goBack();
           },
         ),
         actions: <Widget>[
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Rafraichir',
+            iconSize: 28,
+            tooltip: 'Rafraîchir',
             onPressed: state.isLoading
                 ? null
                 : () {
-                    HapticFeedback.lightImpact();
+                    ZeetHaptics.success();
                     _refreshAll();
                   },
           ),
@@ -156,7 +156,7 @@ class _DeliveriesHistoryScreenState
   }
 
   void _openMissionIfPossible(DeliveryHistoryItem item) {
-    HapticFeedback.lightImpact();
+    ZeetHaptics.success();
     // L'historique peut inclure des livraisons qui ne sont plus des missions
     // actives cote backend. On tente tout de meme la navigation vers le
     // detail : si le backend renvoie 404 la MissionDetailScreen gere
@@ -202,7 +202,7 @@ class _DeliveriesHistoryScreenState
         icon: Icons.history_rounded,
         title: 'Aucune livraison',
         description:
-            'Votre historique apparaîtra ici après votre première course.',
+            'Ton historique apparaîtra ici après ta première course.',
       ),
     );
   }

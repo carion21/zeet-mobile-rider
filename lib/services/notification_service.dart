@@ -1,6 +1,7 @@
 import 'package:rider/core/constants/api.dart';
 import 'package:rider/models/notification_model.dart';
 import 'package:rider/services/api_client.dart';
+import 'package:rider/services/idempotency_cache.dart';
 
 /// Service pour le domaine Notifications de la surface rider.
 /// Encapsule les appels aux endpoints `/v1/rider/notifications/*`.
@@ -78,8 +79,27 @@ class NotificationService {
   /// Accuse reception d'une notification.
   /// CRITIQUE pour le rider : stoppe la cascade WS/FCM/SMS cote backend
   /// (eviter d'avoir plusieurs riders avertis en parallele sur une mission).
+  ///
+  /// Idempotency-Key : la cascade WS peut retransmettre la même notification
+  /// si l'app était offline → l'UUID stable garantit qu'un seul ack est
+  /// effectivement enregistré côté backend (plan §7B critère 1).
   Future<void> acknowledge(int id) async {
-    await _apiClient.post(NotificationEndpoints.acknowledge(id.toString()));
+    final scopeKey = 'n_$id';
+    final uuid = await IdempotencyCaches.notification.mintOrReuse(scopeKey);
+    try {
+      await _apiClient.post(
+        NotificationEndpoints.acknowledge(id.toString()),
+        extraHeaders: {'Idempotency-Key': uuid},
+      );
+      await IdempotencyCaches.notification.clear(scopeKey);
+    } on ApiException catch (e) {
+      // 4xx terminal → clear (impossible à retenter avec ce même UUID).
+      // 5xx + network → on garde l'UUID, le retry futur réutilisera.
+      if (e.statusCode >= 400 && e.statusCode < 500) {
+        await IdempotencyCaches.notification.clear(scopeKey);
+      }
+      rethrow;
+    }
   }
 
   // ---------------------------------------------------------------------------

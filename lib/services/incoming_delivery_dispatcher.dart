@@ -20,17 +20,12 @@ import 'package:rider/services/navigation_service.dart';
 
 abstract class IncomingDeliveryDispatcher {
   /// Traite un payload brut (map type FCM RemoteMessage.data ou JSON decode).
-  /// Retourne `false` si le payload n'est pas une offre "delivery.offer"
-  /// exploitable.
+  /// Le payload est suppose deja filtre en amont par `MissionStatusDispatcher`
+  /// (type "incoming offer"). On parse defensivement et on delegue la
+  /// presentation (sonnerie + ringtone + plein ecran) a `handle()`.
+  ///
+  /// Retourne `false` si le payload est ininterpretable.
   static bool handleRaw(WidgetRef ref, Map<String, dynamic> raw) {
-    // Filtre : on accepte `type_value` (officiel) et `type` (alias) pour
-    // les events delivery.offer.
-    final type = (raw['type_value']?.toString() ?? raw['type']?.toString() ?? '');
-    if (!type.startsWith('delivery.offer') && type != 'new_delivery') {
-      debugPrint('[IncomingDeliveryDispatcher] skipped: type=$type');
-      return false;
-    }
-
     final payload = IncomingDeliveryPayload.tryParse(raw);
     if (payload == null) {
       debugPrint(

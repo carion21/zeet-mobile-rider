@@ -392,17 +392,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Future<void> _openExternal(String url) async {
-    final uri = Uri.parse(url);
-    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!launched && mounted) {
-      AppToast.showError(
-        context: context,
-        message: 'Impossible d\'ouvrir le lien.',
-      );
-    }
-  }
-
   Widget _buildSettingsCard(
     Color surfaceColor,
     Color textColor,
@@ -603,21 +592,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   void _showLanguageDialog(Color surfaceColor, Color textColor, Color textLightColor) {
-    showDialog(
+    // Bottom sheet (UX rider coherente) plutot qu'AlertDialog natif.
+    showModalBottomSheet<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: surfaceColor,
-        title: Text(
-          'Choisir la langue',
-          style: TextStyle(color: textColor, fontSize: 18.sp),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildLanguageOption('Français', surfaceColor, textColor, textLightColor),
-            _buildLanguageOption('English', surfaceColor, textColor, textLightColor),
-            _buildLanguageOption('العربية', surfaceColor, textColor, textLightColor),
-          ],
+      backgroundColor: surfaceColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Drag handle
+              Center(
+                child: Container(
+                  width: 40.w,
+                  height: 4.h,
+                  margin: EdgeInsets.only(bottom: 12.h),
+                  decoration: BoxDecoration(
+                    color: textLightColor.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2.r),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.only(bottom: 12.h, left: 4.w),
+                child: Text(
+                  'Choisir la langue',
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              _buildLanguageOption('Français', surfaceColor, textColor, textLightColor),
+              _buildLanguageOption('English', surfaceColor, textColor, textLightColor),
+              _buildLanguageOption('العربية', surfaceColor, textColor, textLightColor),
+            ],
+          ),
         ),
       ),
     );
@@ -664,21 +680,47 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   void _showMapStyleDialog(Color surfaceColor, Color textColor, Color textLightColor) {
-    showDialog(
+    // Bottom sheet coherent avec le picker de langue.
+    showModalBottomSheet<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: surfaceColor,
-        title: Text(
-          'Style de carte',
-          style: TextStyle(color: textColor, fontSize: 18.sp),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildMapStyleOption('Standard', surfaceColor, textColor, textLightColor),
-            _buildMapStyleOption('Satellite', surfaceColor, textColor, textLightColor),
-            _buildMapStyleOption('Terrain', surfaceColor, textColor, textLightColor),
-          ],
+      backgroundColor: surfaceColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 16.h),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40.w,
+                  height: 4.h,
+                  margin: EdgeInsets.only(bottom: 12.h),
+                  decoration: BoxDecoration(
+                    color: textLightColor.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2.r),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.only(bottom: 12.h, left: 4.w),
+                child: Text(
+                  'Style de carte',
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              _buildMapStyleOption('Standard', surfaceColor, textColor, textLightColor),
+              _buildMapStyleOption('Satellite', surfaceColor, textColor, textLightColor),
+              _buildMapStyleOption('Terrain', surfaceColor, textColor, textLightColor),
+            ],
+          ),
         ),
       ),
     );

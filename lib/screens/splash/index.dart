@@ -1,4 +1,5 @@
 // lib/screens/splash/index.dart
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,8 @@ import 'package:rider/screens/main_scaffold/index.dart';
 import 'package:rider/services/navigation_service.dart';
 import 'package:rider/services/notification_launch_router.dart';
 import 'package:rider/services/permissions_service.dart';
+import 'package:rider/services/token_service.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -36,7 +39,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with TickerProvider
     );
 
     _liquidAnimation = Tween<double>(begin: 0.0, end: 1.1).animate(
-      CurvedAnimation(parent: _liquidController, curve: Curves.easeInOut),
+      CurvedAnimation(parent: _liquidController, curve: ZeetCurves.standard),
     );
 
     // Animation de fade pour le sous-texte (raccourci 600ms)
@@ -46,7 +49,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with TickerProvider
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeIn),
+      CurvedAnimation(parent: _fadeController, curve: ZeetCurves.decelerate),
     );
 
     // Démarrer l'animation du liquide immédiatement
@@ -66,31 +69,39 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with TickerProvider
   Future<void> _checkAuthAndNavigate() async {
     debugPrint('🏍️ [Splash] Début checkAuthAndNavigate');
 
-    try {
-      // Auth check parallèle avec un floor de 1500ms (= durée anim) pour
-      // ne pas couper l'animation si l'auth est instantanée. Si l'auth
-      // prend 5s, on attend 5s (cap timeout 8s). Avant : floor 4s fixe.
-      await Future.wait([
-        ref.read(authProvider.notifier).checkAuthStatus().timeout(
-              const Duration(seconds: 8),
-              onTimeout: () {
-                debugPrint('🏍️ [Splash] checkAuthStatus timeout');
-              },
-            ),
-        Future.delayed(const Duration(milliseconds: 1500)),
-      ]);
-    } catch (e) {
-      debugPrint('🏍️ [Splash] Erreur checkAuthStatus: $e');
-    }
+    final Stopwatch stopwatch = Stopwatch()..start();
 
-    debugPrint('🏍️ [Splash] Auth check terminé, navigation...');
+    // S'assurer que TokenService est initialise (idempotent).
+    await TokenService.instance.init();
+
+    // Source de verite PRIMAIRE : les tokens locaux. Si presents, le rider
+    // est authentifie optimiste — on laisse l'app ouvrir la home, et les
+    // appels API echoueront proprement (401 -> refresh -> login) si les
+    // tokens ne sont plus valides cote serveur. Eviter de dependre du state
+    // du notifier qui peut rester en `unknown` sur timeout cold-start 3G.
+    final bool hasTokens = await TokenService.instance.hasTokens();
+
+    // Booter le auth provider en parallele (pour hydrater le rider).
+    // On n'await PAS son resultat pour la decision de routage : les tokens
+    // locaux sont la source de verite.
+    unawaited(ref.read(authProvider.notifier).checkAuthStatus());
+
+    stopwatch.stop();
+
+    // Floor 1500ms = durée animation liquide.
+    final int elapsed = stopwatch.elapsedMilliseconds;
+    const int minSplashDuration = 1500;
+    if (elapsed < minSplashDuration) {
+      await Future<void>.delayed(
+        Duration(milliseconds: minSplashDuration - elapsed),
+      );
+    }
 
     if (!mounted) return;
 
-    final authState = ref.read(authProvider);
-    debugPrint('🏍️ [Splash] Status: ${authState.status}');
+    debugPrint('🏍️ [Splash] hasTokens=$hasTokens, navigation...');
 
-    if (authState.status == AuthStatus.authenticated) {
+    if (hasTokens) {
       final bool onboarded =
           await PermissionsService.instance.isOnboarded();
       if (!mounted) return;
@@ -169,7 +180,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with TickerProvider
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final backgroundColor = isDarkMode ? const Color(0xFF121212) : Colors.white;
+    final backgroundColor = isDarkMode ? ZeetColors.surfaceDark : Colors.white;
     final primaryColor = Theme.of(context).colorScheme.primary;
     // Le texte a la même couleur que le fond pour être invisible au départ
     // et devient visible uniquement quand le liquide coloré passe derrière

@@ -10,7 +10,6 @@
 // - Haptic sur ouverture
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
@@ -24,7 +23,7 @@ Future<void> showMissionLogsSheet(
   BuildContext context, {
   required String missionId,
 }) {
-  HapticFeedback.lightImpact();
+  ZeetHaptics.success();
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -90,7 +89,7 @@ class _MissionLogsSheet extends ConsumerWidget {
                     icon: const Icon(Icons.refresh_rounded),
                     tooltip: 'Rafraichir',
                     onPressed: () {
-                      HapticFeedback.lightImpact();
+                      ZeetHaptics.success();
                       ref.invalidate(missionLogsProvider(missionId));
                     },
                   ),
@@ -179,7 +178,10 @@ class _TimelineTile extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          // Colonne gauche : dot + ligne
+          // Colonne gauche : dot + ligne. Couleur du dot pilotee par le
+          // backend (`delivery_status.color`) pour glanceability — fallback
+          // primary quand l'event n'est pas une transition de statut
+          // (ex: dispatch scoring runner).
           SizedBox(
             width: 24.w,
             child: Column(
@@ -189,7 +191,7 @@ class _TimelineTile extends StatelessWidget {
                   height: 12.w,
                   margin: EdgeInsets.only(top: 4.h),
                   decoration: BoxDecoration(
-                    color: scheme.primary,
+                    color: entry.dotColor ?? scheme.primary,
                     shape: BoxShape.circle,
                     border: Border.all(color: scheme.surface, width: 2),
                   ),

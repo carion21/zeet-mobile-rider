@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:rider/models/notification_model.dart';
 import 'package:rider/services/api_client.dart';
+import 'package:rider/services/cache_policies.dart';
 import 'package:rider/services/notification_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -62,11 +63,22 @@ class NotificationsListState {
 class NotificationsListNotifier extends StateNotifier<NotificationsListState> {
   final NotificationService _service;
   final Ref _ref;
+  DateTime? _lastFetchedAt;
 
   NotificationsListNotifier(this._service, this._ref)
       : super(const NotificationsListState());
 
-  Future<void> load({int limit = 25}) async {
+  /// Charge la premiere page des notifications.
+  /// [force] : si `true`, ignore le TTL [CachePolicy.notificationsList] (30 s).
+  Future<void> load({int limit = 25, bool force = false}) async {
+    // Court-circuit cache : page 1 fraiche → no-op.
+    if (!force &&
+        _lastFetchedAt != null &&
+        CachePolicies.fresh(CachePolicy.notificationsList, _lastFetchedAt!) &&
+        state.items.isNotEmpty) {
+      return;
+    }
+
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final result = await _service.listNotifications(page: 1, limit: limit);
@@ -75,9 +87,12 @@ class NotificationsListNotifier extends StateNotifier<NotificationsListState> {
         meta: result.meta,
         isLoading: false,
       );
+      _lastFetchedAt = DateTime.now();
     } on ApiException catch (e) {
+      _lastFetchedAt = null;
       state = state.copyWith(isLoading: false, errorMessage: e.message);
     } catch (e) {
+      _lastFetchedAt = null;
       debugPrint('[NotificationsProvider] Erreur load: $e');
       state = state.copyWith(
         isLoading: false,
@@ -112,7 +127,7 @@ class NotificationsListNotifier extends StateNotifier<NotificationsListState> {
   }
 
   Future<void> refresh() async {
-    await load(limit: state.meta?.limit ?? 25);
+    await load(limit: state.meta?.limit ?? 25, force: true);
     _ref.read(unreadCountProvider.notifier).refresh();
   }
 
@@ -225,22 +240,44 @@ class UnreadCountState {
 
 class UnreadCountNotifier extends StateNotifier<UnreadCountState> {
   final NotificationService _service;
+  DateTime? _lastFetchedAt;
+
   UnreadCountNotifier(this._service) : super(const UnreadCountState());
 
-  Future<void> refresh() async {
+  /// Charge le compteur non-lus.
+  /// [force] : si `true`, ignore le TTL
+  /// [CachePolicy.notificationsUnreadCount] (30 s).
+  Future<void> load({bool force = false}) async {
+    if (!force &&
+        _lastFetchedAt != null &&
+        CachePolicies.fresh(
+          CachePolicy.notificationsUnreadCount,
+          _lastFetchedAt!,
+        )) {
+      return;
+    }
+
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final count = await _service.getUnreadCount();
       state = state.copyWith(count: count, isLoading: false);
+      _lastFetchedAt = DateTime.now();
     } on ApiException catch (e) {
+      _lastFetchedAt = null;
       state = state.copyWith(isLoading: false, errorMessage: e.message);
     } catch (e) {
+      _lastFetchedAt = null;
       debugPrint('[NotificationsProvider] Erreur unreadCount: $e');
       state = state.copyWith(isLoading: false);
     }
   }
 
+  /// Force refresh (bypass cache TTL). Appele apres mark-as-read pour
+  /// resynchroniser immediatement le badge.
+  Future<void> refresh() => load(force: true);
+
   void reset() {
+    _lastFetchedAt = null;
     state = const UnreadCountState();
   }
 }

@@ -89,6 +89,23 @@ class PermissionsService {
     }
   }
 
+  /// Just-in-time : retourne le statut courant si déjà accordé, sinon
+  /// déclenche la demande système. À utiliser depuis les flows métier
+  /// (toggle online → ensureLocation, post-login → ensureNotifications)
+  /// plutôt que de brûler toutes les chances en une fois sur l'écran
+  /// onboarding (plan §3.G + skill `zeet-flutter-permission-flow`).
+  ///
+  /// Retourne `granted` ou un status de refus pour le caller. Pas de
+  /// side-effect UI ici — laisser le caller afficher un sheet contextuel.
+  Future<ZeetPermissionStatus> ensure(ZeetPermission p) async {
+    final current = await getStatus(p);
+    if (current == ZeetPermissionStatus.granted ||
+        current == ZeetPermissionStatus.notApplicable) {
+      return current;
+    }
+    return request(p);
+  }
+
   Future<ZeetPermissionStatus> request(ZeetPermission p) async {
     if (!applicablePermissions.contains(p)) {
       return ZeetPermissionStatus.notApplicable;

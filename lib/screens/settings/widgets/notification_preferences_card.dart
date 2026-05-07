@@ -246,7 +246,7 @@ class _ChannelTile extends StatelessWidget {
                           'requis',
                           style: TextStyle(
                             color: ZeetColors.primary,
-                            fontSize: 10.sp,
+                            fontSize: 12.sp,
                             fontWeight: FontWeight.w700,
                           ),
                         ),

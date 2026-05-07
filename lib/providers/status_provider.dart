@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/services/api_client.dart';
 import 'package:rider/services/location_tracking_service.dart';
+import 'package:rider/services/permissions_service.dart';
 import 'package:rider/services/status_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -77,8 +78,27 @@ class StatusNotifier extends StateNotifier<StatusState> {
 
   /// Bascule le statut en ligne / hors ligne.
   /// Retourne un Map avec `success` et `message` pour afficher un toast.
+  ///
+  /// Plan §3.G — just-in-time permissions : si on passe ONLINE, on s'assure
+  /// que la permission de localisation est accordée (le tracking GPS est
+  /// inutile sans). Si refus, on bloque le passage en ligne avec un message
+  /// orienté solution.
   Future<Map<String, dynamic>> toggleOnline() async {
     final newStatus = !state.isOnline;
+
+    if (newStatus) {
+      final locStatus = await PermissionsService.instance
+          .ensure(ZeetPermission.location);
+      if (locStatus != ZeetPermissionStatus.granted) {
+        return {
+          'success': false,
+          'message':
+              "Localisation requise pour passer en ligne. Vérifie les autorisations.",
+          'requiresPermission': true,
+        };
+      }
+    }
+
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {

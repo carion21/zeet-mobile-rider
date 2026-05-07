@@ -53,12 +53,22 @@ class IncomingDeliveryState {
   /// Dernier message d'erreur utilisateur (affiche inline sur l'ecran).
   final String? errorMessage;
 
+  /// Code HTTP de la derniere erreur API (utile pour 409 mission deja prise).
+  final int? errorStatusCode;
+
+  /// Compteur incremente a chaque entree en phase `error`. Permet a l'UI
+  /// de detecter une nouvelle erreur (et de re-mount le slide-to-accept
+  /// pour le reset visuel) meme si la phase reste `error`.
+  final int errorResetVersion;
+
   const IncomingDeliveryState({
     this.phase = IncomingDeliveryPhase.idle,
     this.payload,
     this.secondsRemaining = 0,
     this.totalSeconds = 0,
     this.errorMessage,
+    this.errorStatusCode,
+    this.errorResetVersion = 0,
   });
 
   bool get isActive =>
@@ -82,6 +92,8 @@ class IncomingDeliveryState {
     int? secondsRemaining,
     int? totalSeconds,
     String? errorMessage,
+    int? errorStatusCode,
+    int? errorResetVersion,
     bool clearError = false,
     bool clearPayload = false,
   }) {
@@ -91,6 +103,9 @@ class IncomingDeliveryState {
       secondsRemaining: secondsRemaining ?? this.secondsRemaining,
       totalSeconds: totalSeconds ?? this.totalSeconds,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      errorStatusCode:
+          clearError ? null : (errorStatusCode ?? this.errorStatusCode),
+      errorResetVersion: errorResetVersion ?? this.errorResetVersion,
     );
   }
 }
@@ -197,9 +212,13 @@ class IncomingDeliveryNotifier extends StateNotifier<IncomingDeliveryState> {
       // → on ne peut PAS optimistic-accepter sur 4xx hors transient.
       if (!_isTransient(e.statusCode)) {
         debugPrint('[IncomingDelivery] accept rejected by server: $e');
+        // Incremente errorResetVersion pour forcer le re-mount du slide
+        // cote UI (reset visuel) — meme si la phase est deja `error`.
         state = state.copyWith(
           phase: IncomingDeliveryPhase.error,
           errorMessage: e.message,
+          errorStatusCode: e.statusCode,
+          errorResetVersion: state.errorResetVersion + 1,
         );
         return false;
       }
@@ -280,6 +299,8 @@ class IncomingDeliveryNotifier extends StateNotifier<IncomingDeliveryState> {
         state = state.copyWith(
           phase: IncomingDeliveryPhase.error,
           errorMessage: e.message,
+          errorStatusCode: e.statusCode,
+          errorResetVersion: state.errorResetVersion + 1,
         );
         return false;
       }
@@ -344,7 +365,31 @@ class IncomingDeliveryNotifier extends StateNotifier<IncomingDeliveryState> {
   }
 }
 
-final incomingDeliveryProvider = StateNotifierProvider<
+/// `autoDispose` : libere le state quand plus aucun widget ne le watch
+/// (typiquement au pop de IncomingDeliveryScreen). Evite la fuite de
+/// listeners entre offres successives. Cf. plan rider §S1.
+///
+/// On garde un `KeepAliveLink` actif tant qu'une offre est en cours :
+/// la fenetre entre `show()` (cote dispatcher) et le mount de l'ecran
+/// pourrait sinon disposer le state avant que le screen ne le watch.
+final incomingDeliveryProvider = StateNotifierProvider.autoDispose<
     IncomingDeliveryNotifier, IncomingDeliveryState>((ref) {
-  return IncomingDeliveryNotifier();
+  KeepAliveLink? link;
+  final notifier = IncomingDeliveryNotifier();
+
+  void syncKeepAlive(IncomingDeliveryState s) {
+    if (s.isActive && link == null) {
+      link = ref.keepAlive();
+    } else if (!s.isActive && link != null) {
+      link!.close();
+      link = null;
+    }
+  }
+
+  // `addListener` avec `fireImmediately: true` invoque immediatement avec
+  // l'etat initial sans avoir a acceder a `.state` depuis l'exterieur
+  // (interdit hors subclass StateNotifier).
+  notifier.addListener(syncKeepAlive, fireImmediately: true);
+  ref.onDispose(() => link?.close());
+  return notifier;
 });

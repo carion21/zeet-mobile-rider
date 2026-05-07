@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/models/earnings_model.dart';
 import 'package:rider/services/api_client.dart';
+import 'package:rider/services/cache_policies.dart';
 import 'package:rider/services/earnings_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -48,17 +49,32 @@ class EarningsSummaryState {
 // ---------------------------------------------------------------------------
 class EarningsSummaryNotifier extends StateNotifier<EarningsSummaryState> {
   final EarningsService _earningsService;
+  DateTime? _lastFetchedAt;
 
   EarningsSummaryNotifier(this._earningsService)
       : super(const EarningsSummaryState());
 
   /// Charge le resume des gains pour une periode donnee.
+  /// [force] : si `true`, ignore le TTL [CachePolicy.earningsSummary] (2 min).
   Future<void> load({
     String? period,
     String? dateFrom,
     String? dateTo,
+    bool force = false,
   }) async {
     final effectivePeriod = period ?? state.currentPeriod;
+
+    // Court-circuit cache : meme periode, donnees fraiches → no-op.
+    if (!force &&
+        _lastFetchedAt != null &&
+        CachePolicies.fresh(CachePolicy.earningsSummary, _lastFetchedAt!) &&
+        state.summary != null &&
+        state.currentPeriod == effectivePeriod &&
+        dateFrom == null &&
+        dateTo == null) {
+      return;
+    }
+
     state = state.copyWith(
       isLoading: true,
       clearError: true,
@@ -76,9 +92,12 @@ class EarningsSummaryNotifier extends StateNotifier<EarningsSummaryState> {
       final summary = EarningsSummary.fromJson(data);
 
       state = state.copyWith(summary: summary, isLoading: false);
+      _lastFetchedAt = DateTime.now();
     } on ApiException catch (e) {
+      _lastFetchedAt = null;
       state = state.copyWith(isLoading: false, errorMessage: e.message);
     } catch (_) {
+      _lastFetchedAt = null;
       state = state.copyWith(
         isLoading: false,
         errorMessage: 'Impossible de charger les gains',
@@ -88,6 +107,29 @@ class EarningsSummaryNotifier extends StateNotifier<EarningsSummaryState> {
 
   /// Change la periode et recharge.
   Future<void> changePeriod(String period) => load(period: period);
+
+  /// Rafraichit en arriere-plan sans flasher `isLoading=true`. Le summary
+  /// affiche reste inchange pendant le fetch ; on ne remplace qu'au succes.
+  /// A appeler depuis `didChangeAppLifecycleState(resumed)`.
+  Future<void> silentRefresh({String? period}) async {
+    final effectivePeriod = period ?? state.currentPeriod;
+    try {
+      final response = await _earningsService.getSummary(
+        period: effectivePeriod,
+      );
+      final data = response['data'] as Map<String, dynamic>? ?? response;
+      final summary = EarningsSummary.fromJson(data);
+      state = state.copyWith(
+        summary: summary,
+        clearError: true,
+        currentPeriod: effectivePeriod,
+      );
+      _lastFetchedAt = DateTime.now();
+    } catch (_) {
+      // Silencieux : on garde l'ancien summary affiche, pas d'errorMessage
+      // pour ne pas polluer l'UI au resume si le reseau est instable.
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -136,12 +178,23 @@ class EarningsHistoryState {
 class EarningsHistoryNotifier extends StateNotifier<EarningsHistoryState> {
   final EarningsService _earningsService;
   static const int _pageSize = 10;
+  DateTime? _lastFetchedAt;
 
   EarningsHistoryNotifier(this._earningsService)
       : super(const EarningsHistoryState());
 
   /// Charge la premiere page de l'historique.
-  Future<void> load() async {
+  /// [force] : si `true`, ignore le TTL [CachePolicy.earningsHistory] (5 min).
+  Future<void> load({bool force = false}) async {
+    // Court-circuit cache : si on a deja la page 1 fraiche, no-op.
+    if (!force &&
+        _lastFetchedAt != null &&
+        CachePolicies.fresh(CachePolicy.earningsHistory, _lastFetchedAt!) &&
+        state.entries.isNotEmpty &&
+        state.currentPage == 1) {
+      return;
+    }
+
     state = state.copyWith(
       isLoading: true,
       clearError: true,
@@ -159,9 +212,12 @@ class EarningsHistoryNotifier extends StateNotifier<EarningsHistoryState> {
         currentPage: 1,
         hasMore: entries.length >= _pageSize,
       );
+      _lastFetchedAt = DateTime.now();
     } on ApiException catch (e) {
+      _lastFetchedAt = null;
       state = state.copyWith(isLoading: false, errorMessage: e.message);
     } catch (_) {
+      _lastFetchedAt = null;
       state = state.copyWith(
         isLoading: false,
         errorMessage: 'Impossible de charger l\'historique',
@@ -196,8 +252,8 @@ class EarningsHistoryNotifier extends StateNotifier<EarningsHistoryState> {
     }
   }
 
-  /// Rafraichit (premiere page).
-  Future<void> refresh() => load();
+  /// Rafraichit (premiere page) en bypassant le cache TTL.
+  Future<void> refresh() => load(force: true);
 
   /// Parse la liste d'entrees depuis la reponse API.
   List<EarningsEntry> _parseEntries(Map<String, dynamic> response) {

@@ -5,6 +5,7 @@ import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:rider/core/widgets/toastification.dart';
 import 'package:rider/services/navigation_service.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 
 class SupportScreen extends StatefulWidget {
   const SupportScreen({super.key});
@@ -49,12 +50,12 @@ class _SupportScreenState extends State<SupportScreen> {
     {
       'question': 'Que faire en cas d\'accident ou de panne ?',
       'answer':
-          'Votre sécurité est prioritaire. En cas d\'accident ou de panne, contactez immédiatement le support d\'urgence. Nous réattribuerons la commande et vous assisterons dans les démarches.',
+          'Ta sécurité est prioritaire. En cas d\'accident ou de panne, contacte immédiatement le support d\'urgence. On réattribue la commande et on t\'assiste dans les démarches.',
     },
     {
       'question': 'Comment améliorer mon classement ?',
       'answer':
-          'Votre classement dépend de votre taux d\'acceptation, votre ponctualité et les avis clients. Soyez rapide, courtois et professionnel pour obtenir les meilleures notes et plus de courses.',
+          'Ton classement dépend de ton taux d\'acceptation, ta ponctualité et les avis clients. Sois rapide, courtois et professionnel pour obtenir les meilleures notes et plus de courses.',
     },
     {
       'question': 'Les frais de carburant sont-ils couverts ?',
@@ -75,7 +76,7 @@ class _SupportScreenState extends State<SupportScreen> {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDarkMode ? AppColors.darkText : AppColors.text;
     final textLightColor = isDarkMode ? AppColors.darkTextLight : AppColors.textLight;
-    final backgroundColor = isDarkMode ? AppColors.darkBackground : const Color(0xFFF8F8F8);
+    final backgroundColor = isDarkMode ? AppColors.darkBackground : ZeetColors.surfaceAlt;
     final surfaceColor = isDarkMode ? AppColors.darkSurface : Colors.white;
 
     return Scaffold(

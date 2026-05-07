@@ -13,15 +13,39 @@
 
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:rider/core/config/app_config.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/models/mission_model.dart';
 import 'package:rider/services/routing_service.dart';
 import 'package:zeet_ui/zeet_ui.dart';
+
+// Debounce avant chaque appel a Valhalla — evite de spammer le serveur de
+// routing en zone urbaine ou les positions GPS arrivent toutes les ~50m.
+const Duration _kRouteDebounce = Duration(seconds: 5);
+
+/// TileProvider qui utilise [CachedNetworkImageProvider] pour persister les
+/// tiles OSM sur disque (cache geré par flutter_cache_manager). Reduit le
+/// blanc map de 5-10s sur Edge/3G a ~0s pour les zones deja visitees.
+///
+/// Note : flutter_map injecte automatiquement le User-Agent dans `headers`
+/// a partir de `userAgentPackageName` du [TileLayer], on le forwarde tel quel.
+class _CachedTileProvider extends TileProvider {
+  _CachedTileProvider();
+
+  @override
+  ImageProvider getImage(TileCoordinates coordinates, TileLayer options) {
+    return CachedNetworkImageProvider(
+      getTileUrl(coordinates, options),
+      headers: headers,
+    );
+  }
+}
 
 class DeliveryRouteInfo {
   final double distanceKm;
@@ -54,18 +78,19 @@ class DeliveryMapSection extends StatefulWidget {
 class _DeliveryMapSectionState extends State<DeliveryMapSection> {
   final MapController _mapController = MapController();
 
-  // Coordonnees par defaut (Abidjan) — SEULEMENT en fallback si Geolocator
-  // est indisponible (permissions refusees, indoor, etc.).
-  static const LatLng _kAbidjanFallback = LatLng(5.3400, -4.0200);
-
+  // Fallback Abidjan (centre Plateau) — utilisé SEULEMENT si Geolocator est
+  // indisponible (permissions refusées, indoor, etc.). Source : AppConfig.
   LatLng _pickupLocation = const LatLng(5.3364, -4.0267);
-  LatLng _deliveryLocation = const LatLng(5.3478, -4.0123);
-  LatLng _currentLocation = _kAbidjanFallback;
+  LatLng _deliveryLocation = AppConfig.demoDropoff;
+  LatLng _currentLocation = AppConfig.abidjanFallback;
   bool _hasRealPosition = false;
 
   List<LatLng> _routePoints = [];
 
   StreamSubscription<Position>? _positionSubscription;
+  // Coalesce les recalculs de route : si une nouvelle position arrive avant
+  // que le timer ne se declenche, on annule et on reprogramme. Cf. plan §3.9.
+  Timer? _routeDebounceTimer;
 
   @override
   void initState() {
@@ -74,14 +99,28 @@ class _DeliveryMapSectionState extends State<DeliveryMapSection> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.onLoadingChanged?.call(true);
       _initLocationTracking();
+      // Premier calcul immediat (mount) — pas de debounce a l'ouverture
+      // sinon l'utilisateur attend 5s avant de voir une polyline.
       _calculateRoute();
     });
   }
 
   @override
   void dispose() {
+    _routeDebounceTimer?.cancel();
     _positionSubscription?.cancel();
     super.dispose();
+  }
+
+  /// Programme un recalcul de route en debounce. Si un timer est deja en
+  /// cours, on l'annule pour reprogrammer — evite N requetes Valhalla quand
+  /// le rider se deplace en continu (50m toutes les ~30s en centre-ville).
+  void _scheduleRouteRecalc() {
+    _routeDebounceTimer?.cancel();
+    _routeDebounceTimer = Timer(_kRouteDebounce, () {
+      if (!mounted) return;
+      _calculateRoute();
+    });
   }
 
   /// Initialise la position reelle. Tente d'abord un getCurrentPosition
@@ -107,13 +146,20 @@ class _DeliveryMapSectionState extends State<DeliveryMapSection> {
             onTimeout: () => throw TimeoutException('getCurrentPosition'),
           );
       if (!mounted) return;
-      _applyPosition(initial.latitude, initial.longitude, recalc: true);
+      // Premiere position : recalcul immediat (l'utilisateur attend la map).
+      _applyPosition(
+        initial.latitude,
+        initial.longitude,
+        recalc: true,
+        debounce: false,
+      );
 
-      // Stream pour les updates suivantes.
+      // Stream pour les updates suivantes — debounce 5s pour coalesce les
+      // mouvements continus (cf. _scheduleRouteRecalc).
       _positionSubscription = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
-          distanceFilter: 50, // recalcul si > 50m de deplacement
+          distanceFilter: 50, // tracking GPS reste a 50m pres
         ),
       ).listen(
         (Position pos) {
@@ -129,7 +175,12 @@ class _DeliveryMapSectionState extends State<DeliveryMapSection> {
     }
   }
 
-  void _applyPosition(double lat, double lng, {bool recalc = false}) {
+  void _applyPosition(
+    double lat,
+    double lng, {
+    bool recalc = false,
+    bool debounce = true,
+  }) {
     final next = LatLng(lat, lng);
     final didChange =
         !_hasRealPosition || _distanceMeters(_currentLocation, next) >= 50;
@@ -138,7 +189,13 @@ class _DeliveryMapSectionState extends State<DeliveryMapSection> {
       _hasRealPosition = true;
     });
     if (didChange && recalc) {
-      _calculateRoute();
+      // Premiere position (debounce=false) → calcul immediat.
+      // Updates suivantes du stream → debounce 5s pour ne pas spammer Valhalla.
+      if (debounce) {
+        _scheduleRouteRecalc();
+      } else {
+        _calculateRoute();
+      }
     }
   }
 
@@ -244,6 +301,9 @@ class _DeliveryMapSectionState extends State<DeliveryMapSection> {
         TileLayer(
           urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           userAgentPackageName: 'com.zeet.rider',
+          // Cache disque ~30j (defaut flutter_cache_manager) — tiles deja
+          // chargees s'affichent en <100ms meme en zone Edge/3G.
+          tileProvider: _CachedTileProvider(),
         ),
         if (_routePoints.isNotEmpty)
           PolylineLayer(

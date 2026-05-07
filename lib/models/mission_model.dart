@@ -212,6 +212,7 @@ class MissionAmounts {
 class MissionOrder {
   final int? id;
   final String? reference;
+  final String? code;
   final String? status;
 
   /// Statut enrichi `last_order_status` quand le backend le renvoie (id,
@@ -228,6 +229,7 @@ class MissionOrder {
   const MissionOrder({
     this.id,
     this.reference,
+    this.code,
     this.status,
     this.lastOrderStatus,
     this.partner,
@@ -282,6 +284,7 @@ class MissionOrder {
     return MissionOrder(
       id: json['id'] as int?,
       reference: json['reference'] as String? ?? json['order_number'] as String?,
+      code: json['code'] as String?,
       status: json['status'] as String? ?? lastOrderStatus?.value,
       lastOrderStatus: lastOrderStatus,
       partner: partner,
@@ -298,9 +301,25 @@ class MissionOrder {
 // Mission (liste et detail)
 // ---------------------------------------------------------------------------
 
+/// Suffixe court d'un code ZEET. Format attendu :
+/// `<PREFIX><YYMMDDHH>_<MMSS>_<RAND4>` (ex: `DEL26042500_5116_3312`).
+/// Retourne le segment apres le dernier `_` (ex: `3312`). Fallback :
+/// code complet si format inattendu.
+String _shortenCode(String code) {
+  final parts = code.split('_');
+  if (parts.length < 2) return code;
+  final tail = parts.last;
+  return tail.isEmpty ? code : tail;
+}
+
 /// Mission de livraison (vue liste).
 class Mission {
   final int id;
+
+  /// Code lisible de la livraison (ex: `LIV-20260425-0042`). Source de
+  /// verite pour l'affichage UI — le `id` numerique reste interne.
+  final String? code;
+
   final String? status;
 
   /// Statut enrichi `last_delivery_status` quand le backend le renvoie (id,
@@ -319,8 +338,18 @@ class Mission {
   final String? pickupOtp;
   final String? deliveryOtp;
 
+  /// Deep-link Google Maps de navigation guidée vers le restaurant.
+  /// Construit côté core via `buildGoogleMapsNavigationUrl()`. Null si
+  /// `order_position.pickup_lat/lng` absent.
+  final String? navigationPickupUrl;
+
+  /// Deep-link Google Maps de navigation guidée vers le client.
+  /// Idem `navigationPickupUrl` mais cible le dropoff.
+  final String? navigationDeliveryUrl;
+
   const Mission({
     required this.id,
+    this.code,
     this.status,
     this.lastDeliveryStatus,
     this.order,
@@ -333,6 +362,8 @@ class Mission {
     this.updatedAt,
     this.pickupOtp,
     this.deliveryOtp,
+    this.navigationPickupUrl,
+    this.navigationDeliveryUrl,
   });
 
   /// Raccourci : couleur du statut livraison (API), sinon statut order, sinon `null`.
@@ -379,14 +410,58 @@ class Mission {
     return '$count article${count > 1 ? 's' : ''}';
   }
 
-  /// Reference de la commande.
-  String get orderReference => order?.reference ?? '#$id';
+  /// Code lisible de la livraison (header detail, card list). Fallback :
+  /// reference de la commande, sinon `#$id` en dernier recours.
+  String get displayCode {
+    if (code != null && code!.isNotEmpty) return code!;
+    final ref = order?.reference;
+    if (ref != null && ref.isNotEmpty) return ref;
+    final orderCode = order?.code;
+    if (orderCode != null && orderCode.isNotEmpty) return orderCode;
+    return '#$id';
+  }
+
+  /// Numero/code de la commande (distinct du code livraison).
+  String? get orderCode {
+    final ref = order?.reference;
+    if (ref != null && ref.isNotEmpty) return ref;
+    final c = order?.code;
+    if (c != null && c.isNotEmpty) return c;
+    return null;
+  }
+
+  /// Suffixe court d'un code ZEET (`DEL26042500_5116_3312` → `3312`).
+  /// Lisible glance sur petite pill, unique en pratique sur la fenetre
+  /// d'une journee. Le code complet reste disponible via [displayCode].
+  String get shortDeliveryCode => _shortenCode(displayCode);
+
+  /// Idem pour le code commande (utilise dans le sous-titre du header).
+  String? get shortOrderCode {
+    final c = orderCode;
+    return c == null ? null : _shortenCode(c);
+  }
+
+  /// Reference de la commande (legacy — usage list/card).
+  String get orderReference => order?.reference ?? order?.code ?? '#$id';
 
   factory Mission.fromJson(Map<String, dynamic> json) {
-    // ID : peut etre int ou string
-    final id = json['id'] is int
-        ? json['id'] as int
-        : int.tryParse(json['id'].toString()) ?? 0;
+    // ID : peut etre int ou string. Une mission sans id valide ne doit
+    // jamais entrer dans l'app — sinon les actions accept/collect/deliver
+    // ciblent /missions/0/... et le backend renvoie 404. On leve une
+    // FormatException : le caller (mission list / detail) doit la
+    // traiter (typiquement via map().toList() qui propagera l'erreur
+    // vers le `catch` du load() — l'item invalide est ignore et l'erreur
+    // est consignee).
+    final dynamic rawId = json['id'];
+    final int? parsedId = rawId is int
+        ? rawId
+        : (rawId is String ? int.tryParse(rawId) : null);
+    if (parsedId == null || parsedId == 0) {
+      throw FormatException(
+        'Mission sans id valide dans le JSON: $json',
+      );
+    }
+    final id = parsedId;
 
     // Order
     MissionOrder? order;
@@ -418,6 +493,7 @@ class Mission {
 
     return Mission(
       id: id,
+      code: json['code'] as String?,
       status: json['status'] as String? ?? lastDeliveryStatus?.value,
       lastDeliveryStatus: lastDeliveryStatus,
       order: order,
@@ -430,11 +506,14 @@ class Mission {
       updatedAt: json['updated_at'] as String?,
       pickupOtp: json['pickup_otp'] as String?,
       deliveryOtp: json['delivery_otp'] as String?,
+      navigationPickupUrl: json['navigation_pickup_url'] as String?,
+      navigationDeliveryUrl: json['navigation_delivery_url'] as String?,
     );
   }
 
   Mission copyWith({
     int? id,
+    String? code,
     String? status,
     MissionStatus? lastDeliveryStatus,
     MissionOrder? order,
@@ -447,9 +526,12 @@ class Mission {
     String? updatedAt,
     String? pickupOtp,
     String? deliveryOtp,
+    String? navigationPickupUrl,
+    String? navigationDeliveryUrl,
   }) {
     return Mission(
       id: id ?? this.id,
+      code: code ?? this.code,
       status: status ?? this.status,
       lastDeliveryStatus: lastDeliveryStatus ?? this.lastDeliveryStatus,
       order: order ?? this.order,
@@ -462,6 +544,9 @@ class Mission {
       updatedAt: updatedAt ?? this.updatedAt,
       pickupOtp: pickupOtp ?? this.pickupOtp,
       deliveryOtp: deliveryOtp ?? this.deliveryOtp,
+      navigationPickupUrl: navigationPickupUrl ?? this.navigationPickupUrl,
+      navigationDeliveryUrl:
+          navigationDeliveryUrl ?? this.navigationDeliveryUrl,
     );
   }
 }

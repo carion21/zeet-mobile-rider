@@ -1,5 +1,6 @@
 // lib/core/utils/screen_util_helper.dart
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 
 /// Helper class pour faciliter l'utilisation de ScreenUtil dans l'application
 ///
@@ -60,26 +61,26 @@ class ScreenUtilHelper {
   /// Informations très secondaires - Timestamps, métadonnées
   static double get captionSize => 11.sp;
 
-  /// Padding petit
-  static double get paddingSmall => 8.w;
+  /// Padding petit (aligné ZeetSpacing.x2 = 8pt).
+  static double get paddingSmall => ZeetSpacing.x2.w;
 
-  /// Padding moyen
-  static double get paddingMedium => 16.w;
+  /// Padding moyen (aligné ZeetSpacing.x4 = 16pt).
+  static double get paddingMedium => ZeetSpacing.x4.w;
 
-  /// Padding large
-  static double get paddingLarge => 24.w;
+  /// Padding large (aligné ZeetSpacing.x6 = 24pt).
+  static double get paddingLarge => ZeetSpacing.x6.w;
 
-  /// Padding extra large
-  static double get paddingXLarge => 32.w;
+  /// Padding extra large (aligné ZeetSpacing.x8 = 32pt).
+  static double get paddingXLarge => ZeetSpacing.x8.w;
 
-  /// Rayon de bordure petit
-  static double get radiusSmall => 8.r;
+  /// Rayon de bordure petit (aligné ZeetSpacing.x2 = 8pt).
+  static double get radiusSmall => ZeetSpacing.x2.r;
 
-  /// Rayon de bordure moyen
-  static double get radiusMedium => 12.r;
+  /// Rayon de bordure moyen (aligné ZeetSpacing.x3 = 12pt).
+  static double get radiusMedium => ZeetSpacing.x3.r;
 
-  /// Rayon de bordure large
-  static double get radiusLarge => 16.r;
+  /// Rayon de bordure large (aligné ZeetSpacing.x4 = 16pt).
+  static double get radiusLarge => ZeetSpacing.x4.r;
 
   /// Taille d'icône petit
   static double get iconSizeSmall => 16.sp;

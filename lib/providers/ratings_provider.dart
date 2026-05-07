@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/models/rating_model.dart';
 import 'package:rider/services/api_client.dart';
+import 'package:rider/services/cache_policies.dart';
 import 'package:rider/services/ratings_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -68,11 +69,21 @@ class RatingsListState {
 class RatingsNotifier extends StateNotifier<RatingsListState> {
   final RatingsService _service;
   static const int _pageSize = 25;
+  DateTime? _lastFetchedAt;
 
   RatingsNotifier(this._service) : super(const RatingsListState());
 
   /// Charge la premiere page (utilise aussi pour pull-to-refresh).
-  Future<void> load() async {
+  /// [force] : si `true`, ignore le TTL [CachePolicy.ratings] (10 min).
+  Future<void> load({bool force = false}) async {
+    // Court-circuit cache : si on a deja la page 1 fraiche, no-op.
+    if (!force &&
+        _lastFetchedAt != null &&
+        CachePolicies.fresh(CachePolicy.ratings, _lastFetchedAt!) &&
+        state.entries.isNotEmpty) {
+      return;
+    }
+
     state = state.copyWith(isLoading: true, clearError: true);
 
     try {
@@ -85,12 +96,15 @@ class RatingsNotifier extends StateNotifier<RatingsListState> {
         meta: page.meta,
         isLoading: false,
       );
+      _lastFetchedAt = DateTime.now();
     } on ApiException catch (e) {
+      _lastFetchedAt = null;
       state = state.copyWith(
         isLoading: false,
         errorMessage: e.message,
       );
     } catch (_) {
+      _lastFetchedAt = null;
       state = state.copyWith(
         isLoading: false,
         errorMessage: 'Impossible de charger vos notes',
@@ -128,8 +142,8 @@ class RatingsNotifier extends StateNotifier<RatingsListState> {
     }
   }
 
-  /// Rafraichit la liste (reset page a 1).
-  Future<void> refresh() => load();
+  /// Rafraichit la liste (reset page a 1, bypass cache TTL).
+  Future<void> refresh() => load(force: true);
 }
 
 // ---------------------------------------------------------------------------

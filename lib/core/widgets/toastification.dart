@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:toastification/toastification.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 
 
 /// Enum pour différencier les types de messages dans le toast
@@ -39,24 +40,25 @@ class AppToast {
     IconData iconData;
     String typeLabel;
 
+    // Couleurs alignees sur les tokens DS (ZeetColors via AppColors)
     switch (type) {
       case ToastType.info:
-        primaryColor = const Color(0xFF2196F3);
+        primaryColor = AppColors.info;
         iconData = IconManager.getIconData('info');
         typeLabel = 'Info';
         break;
       case ToastType.success:
-        primaryColor = const Color(0xFF4CD964);
+        primaryColor = AppColors.success;
         iconData = IconManager.getIconData('success');
         typeLabel = 'Succès';
         break;
       case ToastType.warning:
-        primaryColor = AppColors.primary;
+        primaryColor = AppColors.warning;
         iconData = IconManager.getIconData('warning');
         typeLabel = 'Attention';
         break;
       case ToastType.error:
-        primaryColor = AppColors.error;
+        primaryColor = AppColors.danger;
         iconData = IconManager.getIconData('error');
         typeLabel = 'Erreur';
         break;
@@ -72,18 +74,18 @@ class AppToast {
       style: ToastificationStyle.minimal,
       alignment: Alignment.topCenter,
       autoCloseDuration: duration,
-      animationDuration: const Duration(milliseconds: 500),
+      animationDuration: ZeetMotion.lg,
       animationBuilder: (context, animation, alignment, child) {
         // Animation combinée : scale + slide + fade pour un effet fluide
         return FadeTransition(
-          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+          opacity: CurvedAnimation(parent: animation, curve: ZeetCurves.decelerate),
           child: SlideTransition(
             position: Tween<Offset>(
               begin: const Offset(0, -0.5),
               end: Offset.zero,
-            ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutBack)),
+            ).animate(CurvedAnimation(parent: animation, curve: ZeetCurves.expressive)),
             child: ScaleTransition(
-              scale: Tween<double>(begin: 0.85, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+              scale: Tween<double>(begin: 0.85, end: 1.0).animate(CurvedAnimation(parent: animation, curve: ZeetCurves.decelerate)),
               child: child,
             ),
           ),

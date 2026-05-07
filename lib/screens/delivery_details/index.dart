@@ -6,14 +6,15 @@
 // `missionDetailProvider` + `missionsListProvider`.
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/mission_status.dart';
+import 'package:rider/core/widgets/app_popup.dart';
 import 'package:rider/core/widgets/toastification.dart';
 import 'package:zeet_ui/zeet_ui.dart';
-import 'package:rider/services/navigation_service.dart';
+import 'package:rider/providers/earnings_provider.dart';
 import 'package:rider/providers/mission_provider.dart';
+import 'package:rider/services/navigation_service.dart';
 import 'package:rider/screens/delivery_details/widgets/delivery_collapsed_card.dart';
 import 'package:rider/screens/delivery_details/widgets/delivery_error_view.dart';
 import 'package:rider/screens/delivery_details/widgets/delivery_header.dart';
@@ -22,7 +23,9 @@ import 'package:rider/screens/delivery_details/widgets/delivery_loading_pill.dar
 import 'package:rider/screens/delivery_details/widgets/delivery_map_section.dart';
 import 'package:rider/screens/delivery_details/widgets/delivery_nav_info_bar.dart';
 import 'package:rider/screens/delivery_details/widgets/delivery_otp_section.dart';
+import 'package:rider/screens/delivery_details/widgets/delivery_progress_header.dart';
 import 'package:rider/screens/delivery_details/widgets/mission_completed_sheet.dart';
+import 'package:rider/screens/delivery_details/widgets/primary_step_action.dart';
 import 'package:rider/screens/delivery_details/widgets/report_issue_sheet.dart';
 
 class DeliveryDetailsScreen extends ConsumerStatefulWidget {
@@ -39,7 +42,8 @@ class DeliveryDetailsScreen extends ConsumerStatefulWidget {
       _DeliveryDetailsScreenState();
 }
 
-class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen> {
+class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen>
+    with WidgetsBindingObserver {
   // Infos de navigation calculees par le map child via callback.
   String _estimatedArrival = '--:--';
   double _routeDistance = 0.0;
@@ -49,9 +53,18 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen> {
   // Etat du bloc d'informations (deplie / replie).
   bool _isExpanded = true;
 
+  // Anti-double-tap : verrou local pour les 5 actions critiques. Empeche les
+  // re-entrees pendant qu'une action est en vol (audit C5 / Phase 2.2).
+  bool _busy = false;
+
+  // ID memoisé au mount (audit C5 + Phase 1.3) — evite les `int.parse` repetes.
+  int? _missionIdInt;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _missionIdInt = int.tryParse(widget.missionId ?? '');
     if (widget.missionId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref.read(missionDetailProvider.notifier).load(widget.missionId!);
@@ -59,147 +72,319 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen> {
     }
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Refetch silencieux au retour foreground (Phase 1.3).
+    if (state == AppLifecycleState.resumed && widget.missionId != null) {
+      final id = _missionIdInt ?? -1;
+      if (id != -1) {
+        ref.read(missionDetailProvider.notifier).silentRefresh(id);
+      }
+    }
+  }
+
   void _toggleExpanded() => setState(() => _isExpanded = !_isExpanded);
+
+  /// Garde-fou commun aux 5 actions : verifie l'ID + acquiert le verrou.
+  /// Retourne `null` si la mission est invalide (toast + back ont ete declenches).
+  /// Sinon retourne l'ID parse, et bascule `_busy=true`.
+  int? _beginAction() {
+    if (_busy) return null;
+    final id = _missionIdInt;
+    if (id == null) {
+      AppToast.showError(context: context, message: 'Mission invalide');
+      Routes.goBack();
+      return null;
+    }
+    setState(() => _busy = true);
+    return id;
+  }
+
+  void _endAction() {
+    if (mounted) setState(() => _busy = false);
+  }
 
   // ---------------------------------------------------------------------------
   // Actions
   // ---------------------------------------------------------------------------
 
   Future<void> _handleAccept() async {
-    await HapticFeedback.mediumImpact();
-    final result = await ref.read(missionDetailProvider.notifier).accept();
-    if (!mounted) return;
+    final id = _beginAction();
+    if (id == null) return;
+    try {
+      await ZeetHaptics.warning();
+      final result = await ref.read(missionDetailProvider.notifier).accept();
+      if (!mounted) return;
 
-    if (result['success'] == true) {
-      ref.read(missionsListProvider.notifier).updateMissionStatus(
-            int.parse(widget.missionId!),
-            'accepted',
-          );
-      AppToast.showSuccess(context: context, message: result['message'] as String);
-    } else {
-      AppToast.showError(context: context, message: result['message'] as String);
+      if (result['success'] == true) {
+        ref
+            .read(missionsListProvider.notifier)
+            .updateMissionStatus(id, 'accepted');
+        AppToast.showSuccess(
+            context: context, message: result['message'] as String);
+      } else {
+        AppToast.showError(
+            context: context, message: result['message'] as String);
+      }
+    } finally {
+      _endAction();
     }
   }
 
   Future<void> _handleReject() async {
-    await HapticFeedback.heavyImpact();
-    if (!mounted) return;
-    final reason = await DeliveryOtpDialogs.showLegacyReasonDialog(
-      context: context,
-      title: 'Refuser la mission',
-      hint: 'Raison du refus',
-    );
-    if (reason == null || reason.isEmpty) return;
+    final id = _beginAction();
+    if (id == null) return;
+    try {
+      await ZeetHaptics.heavy();
+      if (!mounted) return;
 
-    final result =
-        await ref.read(missionDetailProvider.notifier).reject(reason: reason);
-    if (!mounted) return;
+      // Confirmation prealable (Phase 3.7) — refus = action irreversible.
+      final confirmed = await AppPopup.showConfirmation(
+        context: context,
+        title: 'Refuser la mission ?',
+        message: "Tu ne pourras plus l'accepter ensuite.",
+        confirmLabel: 'Refuser',
+        cancelLabel: 'Annuler',
+        isDestructive: true,
+      );
+      if (!confirmed || !mounted) return;
 
-    if (result['success'] == true) {
-      ref
-          .read(missionsListProvider.notifier)
-          .removeMission(int.parse(widget.missionId!));
-      AppToast.showSuccess(context: context, message: result['message'] as String);
-      Routes.goBack();
-    } else {
-      AppToast.showError(context: context, message: result['message'] as String);
+      final reason = await DeliveryOtpDialogs.showLegacyReasonDialog(
+        context: context,
+        title: 'Refuser la mission',
+        hint: 'Raison du refus',
+      );
+      if (reason == null || reason.isEmpty) return;
+
+      final result =
+          await ref.read(missionDetailProvider.notifier).reject(reason: reason);
+      if (!mounted) return;
+
+      if (result['success'] == true) {
+        ref.read(missionsListProvider.notifier).removeMission(id);
+        AppToast.showSuccess(
+            context: context, message: result['message'] as String);
+        Routes.goBack();
+      } else {
+        AppToast.showError(
+            context: context, message: result['message'] as String);
+      }
+    } finally {
+      _endAction();
     }
   }
 
   Future<void> _handleCollect() async {
-    await HapticFeedback.mediumImpact();
-    if (!mounted) return;
-    // OTP 4 cases avec auto-submit + tentatives.
-    final otp = await DeliveryOtpDialogs.showOtpDialog(
-      context: context,
-      title: 'Code de collecte',
-      subtitle: 'Le partenaire te le donne — 4 chiffres',
-      length: 4,
-      onValidate: (code) async {
-        final result = await ref
-            .read(missionDetailProvider.notifier)
-            .collect(otpCode: code);
-        if (result['success'] == true) {
-          // Optimistic: on retourne null pour fermer le dialog.
-          return null;
-        }
-        return (result['message'] as String?) ?? 'Code invalide';
-      },
-    );
-    if (otp == null || !mounted) return;
-    // Update local + toast (l'optimistic + queue gere le sync).
-    ref.read(missionsListProvider.notifier).updateMissionStatus(
-          int.parse(widget.missionId!),
-          'collected',
-        );
-    AppToast.showSuccess(context: context, message: 'Commande recuperee');
+    final id = _beginAction();
+    if (id == null) return;
+    try {
+      await ZeetHaptics.warning();
+      if (!mounted) return;
+      // OTP 4 cases avec auto-submit + tentatives.
+      final otp = await DeliveryOtpDialogs.showOtpDialog(
+        context: context,
+        title: 'Code de collecte',
+        subtitle: 'Le partenaire te le donne — 4 chiffres',
+        length: 4,
+        onValidate: (code) async {
+          final result = await ref
+              .read(missionDetailProvider.notifier)
+              .collect(otpCode: code);
+          if (result['success'] == true) {
+            // Optimistic: on retourne null pour fermer le dialog.
+            return null;
+          }
+          return (result['message'] as String?) ?? 'Code invalide';
+        },
+      );
+      if (otp == null || !mounted) return;
+      // Update local + toast (l'optimistic + queue gere le sync).
+      ref
+          .read(missionsListProvider.notifier)
+          .updateMissionStatus(id, 'collected');
+      AppToast.showSuccess(context: context, message: 'Commande recuperee');
+    } finally {
+      _endAction();
+    }
   }
 
   Future<void> _handleDeliver() async {
-    await HapticFeedback.mediumImpact();
-    if (!mounted) return;
-    final num fee = ref.read(missionDetailProvider).mission?.fee ?? 0;
+    final id = _beginAction();
+    if (id == null) return;
+    try {
+      await ZeetHaptics.warning();
+      if (!mounted) return;
+      final num fee = ref.read(missionDetailProvider).mission?.fee ?? 0;
 
-    final otp = await DeliveryOtpDialogs.showOtpDialog(
-      context: context,
-      title: 'Code de livraison',
-      subtitle: 'Le client te le donne — 4 chiffres',
-      length: 4,
-      onValidate: (code) async {
-        final result = await ref
-            .read(missionDetailProvider.notifier)
-            .deliver(otpCode: code);
-        if (result['success'] == true) return null;
-        return (result['message'] as String?) ?? 'Code invalide';
-      },
-    );
-    if (otp == null || !mounted) return;
+      final otp = await DeliveryOtpDialogs.showOtpDialog(
+        context: context,
+        title: 'Code de livraison',
+        subtitle: 'Le client te le donne — 4 chiffres',
+        length: 4,
+        onValidate: (code) async {
+          final result = await ref
+              .read(missionDetailProvider.notifier)
+              .deliver(otpCode: code);
+          if (result['success'] == true) return null;
+          return (result['message'] as String?) ?? 'Code invalide';
+        },
+      );
+      if (otp == null || !mounted) return;
 
-    HapticFeedback.heavyImpact();
-    ref.read(missionsListProvider.notifier).updateMissionStatus(
-          int.parse(widget.missionId!),
-          'delivered',
-        );
-    // Peak moment puis pop l'ecran : 1 tap au lieu de 2 pour quitter
-    // (skill `zeet-3-clicks-rule` — actions recurrentes en 1 tap).
-    await showMissionCompletedSheet(context, fee: fee, success: true);
-    if (!mounted) return;
-    Routes.goBack();
+      ZeetHaptics.heavy();
+      ref
+          .read(missionsListProvider.notifier)
+          .updateMissionStatus(id, 'delivered');
+      // Plan §3.5 : compte courses jour pour amplifier le jalon (5e/10e/20e).
+      // +1 car on vient d'en valider une (le provider n'a pas encore rafraîchi).
+      final summary = ref.read(earningsSummaryProvider).summary;
+      final int countToday = (summary?.completedDeliveries ?? 0) + 1;
+      // Peak moment puis pop l'ecran : 1 tap au lieu de 2 pour quitter
+      // (skill `zeet-3-clicks-rule` — actions recurrentes en 1 tap).
+      await showMissionCompletedSheet(
+        context,
+        fee: fee,
+        success: true,
+        deliveriesToday: countToday,
+      );
+      if (!mounted) return;
+      Routes.goBack();
+    } finally {
+      _endAction();
+    }
   }
 
   Future<void> _handleNotDelivered() async {
-    await HapticFeedback.heavyImpact();
-    if (!mounted) return;
-    final result = await DeliveryOtpDialogs.showReasonDialog(
-      context: context,
-      title: 'Livraison impossible',
-      includeGeo: true,
-    );
-    if (result == null || result.reason.isEmpty) return;
-
-    final apiResult =
-        await ref.read(missionDetailProvider.notifier).notDelivered(
-              reason: result.reason,
-              lat: result.geoLat,
-              lng: result.geoLng,
-            );
-    if (!mounted) return;
-
-    if (apiResult['success'] == true) {
-      ref.read(missionsListProvider.notifier).updateMissionStatus(
-            int.parse(widget.missionId!),
-            'not-delivered',
-          );
-      await showMissionCompletedSheet(context, fee: 0, success: false);
+    final id = _beginAction();
+    if (id == null) return;
+    try {
+      await ZeetHaptics.heavy();
       if (!mounted) return;
-      Routes.goBack();
-    } else {
-      AppToast.showError(
-          context: context, message: apiResult['message'] as String);
+      final result = await DeliveryOtpDialogs.showReasonDialog(
+        context: context,
+        title: 'Livraison impossible',
+        includeGeo: true,
+      );
+      if (result == null || result.reason.isEmpty) return;
+
+      final apiResult =
+          await ref.read(missionDetailProvider.notifier).notDelivered(
+                reason: result.reason,
+                lat: result.geoLat,
+                lng: result.geoLng,
+              );
+      if (!mounted) return;
+
+      if (apiResult['success'] == true) {
+        ref
+            .read(missionsListProvider.notifier)
+            .updateMissionStatus(id, 'not-delivered');
+        await showMissionCompletedSheet(context, fee: 0, success: false);
+        if (!mounted) return;
+        Routes.goBack();
+      } else {
+        AppToast.showError(
+            context: context, message: apiResult['message'] as String);
+      }
+    } finally {
+      _endAction();
     }
   }
 
   void _handleClose() => Routes.goBack();
+
+  // ---------------------------------------------------------------------------
+  // Skeleton loader (Phase 3.8) — remplace le CircularProgressIndicator plein
+  // ecran par une silhouette de la page (header pill, map placeholder, info
+  // card avec boutons d'action). Reduit l'effet "vide" pendant le fetch et
+  // mime la structure attendue.
+  // ---------------------------------------------------------------------------
+
+  Widget _buildLoadingSkeleton(bool isDarkMode) {
+    final Color base = isDarkMode
+        ? AppColors.darkSurface
+        : ZeetColors.surfaceAlt;
+    return Stack(
+      children: [
+        // Map placeholder full screen.
+        Positioned.fill(
+          child: Container(color: base),
+        ),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header pill (titre + bouton report).
+                Row(
+                  children: const [
+                    ZeetSkeleton.circle(size: 36),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: ZeetSkeleton(height: 18),
+                    ),
+                    SizedBox(width: 12),
+                    ZeetSkeleton.circle(size: 36),
+                  ],
+                ),
+                const Spacer(),
+                // Nav info bar (distance / duree / arrivee).
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDarkMode
+                        ? AppColors.darkBackground
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: const [
+                      Expanded(child: ZeetSkeleton(height: 14)),
+                      SizedBox(width: 12),
+                      Expanded(child: ZeetSkeleton(height: 14)),
+                      SizedBox(width: 12),
+                      Expanded(child: ZeetSkeleton(height: 14)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Info card + boutons d'action.
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDarkMode
+                        ? AppColors.darkBackground
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      ZeetSkeleton(width: 140, height: 16),
+                      SizedBox(height: 12),
+                      ZeetSkeleton(height: 14),
+                      SizedBox(height: 8),
+                      ZeetSkeleton(width: 220, height: 14),
+                      SizedBox(height: 20),
+                      ZeetSkeleton(height: 48),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   // ---------------------------------------------------------------------------
   // Build
@@ -233,10 +418,20 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen> {
             mission?.order?.lastOrderStatus?.label ??
             visual.label);
 
-    return Scaffold(
+    // PopScope : bloque le swipe back accidentel pendant qu'une action
+    // critique est en cours (collect/deliver/OTP). Skill `zeet-gesture-grammar`
+    // §PopScope. canPop=false dès qu'on est en busy.
+    return PopScope(
+      canPop: !_busy,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (didPop || !_busy) return;
+        // Feedback minimal pour signaler que l'action est en cours.
+        ZeetHaptics.success();
+      },
+      child: Scaffold(
       backgroundColor: backgroundColor,
       body: detailState.isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? _buildLoadingSkeleton(isDarkMode)
           : detailState.errorMessage != null
               ? DeliveryErrorView(
                   message: detailState.errorMessage!,
@@ -270,7 +465,12 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen> {
                         children: [
                           DeliveryHeader(
                             missionId: widget.missionId,
-                            orderReference: mission?.orderReference,
+                            deliveryCode: mission?.displayCode,
+                            deliveryCodeShort: mission?.shortDeliveryCode,
+                            orderCode: mission?.orderCode,
+                            orderCodeShort: mission?.shortOrderCode,
+                            statusLabel: mission?.statusLabel,
+                            statusColor: statusColor,
                             missionDbId: mission?.id,
                             // Bouton "Signaler un souci" disponible uniquement
                             // sur une mission active (pas sur les terminees).
@@ -285,6 +485,12 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen> {
                                           mission.dropoffAddress?.label ??
                                               mission.pickupAddress?.label,
                                     ),
+                          ),
+                          // Progression 3 segments : Récup → Trajet → Livraison.
+                          // Stateless / tokens uniquement, animé en ZeetMotion.md
+                          // sur changement de status.
+                          DeliveryProgressHeader(
+                            missionStatus: mission?.status,
                           ),
                           const Spacer(),
                           GestureDetector(
@@ -304,20 +510,59 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen> {
                                     isExpanded: _isExpanded,
                                     onToggle: _toggleExpanded,
                                   ),
-                                  if (mission != null)
-                                    DeliveryInfoCard(
-                                      mission: mission,
-                                      statusColor: statusColor,
-                                      statusText: statusLabel,
-                                      isActionLoading:
-                                          detailState.isActionLoading,
-                                      onAccept: _handleAccept,
-                                      onReject: _handleReject,
-                                      onCollect: _handleCollect,
-                                      onDeliver: _handleDeliver,
-                                      onNotDelivered: _handleNotDelivered,
-                                      onClose: _handleClose,
+                                  if (mission != null) ...[
+                                    // CTA primaire slide-to-confirm pour les
+                                    // étapes Récup (accepted) et Trajet
+                                    // (collected/on-the-way). Sur les autres
+                                    // statuts → SizedBox.shrink, et la card
+                                    // ci-dessous gère les boutons (accept,
+                                    // reject, terminal). On masque ici la
+                                    // double action en passant
+                                    // `hidePrimaryStepActions: true`.
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                          ZeetSpacing.x4,
+                                          ZeetSpacing.x2,
+                                          ZeetSpacing.x4,
+                                          ZeetSpacing.x0),
+                                      child: PrimaryStepAction(
+                                        missionStatus: mission.status,
+                                        enabled: !(detailState.isActionLoading ||
+                                            _busy),
+                                        onConfirm: () {
+                                          final s = (mission.status ?? '')
+                                              .replaceAll('_', '-');
+                                          if (s == 'accepted') {
+                                            _handleCollect();
+                                          } else {
+                                            _handleDeliver();
+                                          }
+                                        },
+                                      ),
                                     ),
+                                    // Verrou local OR isActionLoading global :
+                                    // disable visuellement les boutons +
+                                    // ignore les taps pendant un in-flight
+                                    // (Phase 2.2).
+                                    IgnorePointer(
+                                      ignoring: _busy,
+                                      child: DeliveryInfoCard(
+                                        mission: mission,
+                                        statusColor: statusColor,
+                                        statusText: statusLabel,
+                                        isActionLoading:
+                                            detailState.isActionLoading ||
+                                                _busy,
+                                        hidePrimaryStepActions: true,
+                                        onAccept: _handleAccept,
+                                        onReject: _handleReject,
+                                        onCollect: _handleCollect,
+                                        onDeliver: _handleDeliver,
+                                        onNotDelivered: _handleNotDelivered,
+                                        onClose: _handleClose,
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                               secondChild: DeliveryCollapsedCard(
@@ -330,10 +575,10 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen> {
                               crossFadeState: _isExpanded
                                   ? CrossFadeState.showFirst
                                   : CrossFadeState.showSecond,
-                              duration: const Duration(milliseconds: 300),
-                              firstCurve: Curves.easeInOut,
-                              secondCurve: Curves.easeInOut,
-                              sizeCurve: Curves.easeInOut,
+                              duration: ZeetMotion.md,
+                              firstCurve: ZeetCurves.standard,
+                              secondCurve: ZeetCurves.standard,
+                              sizeCurve: ZeetCurves.standard,
                             ),
                           ),
                         ],
@@ -341,6 +586,7 @@ class _DeliveryDetailsScreenState extends ConsumerState<DeliveryDetailsScreen> {
                     ),
                   ],
                 ),
+      ),
     );
   }
 }

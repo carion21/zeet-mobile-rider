@@ -38,7 +38,7 @@ class LoginController {
   /// Valide le numéro de téléphone saisi
   String? validatePhone(String? value) {
     if (value == null || value.isEmpty) {
-      return 'Veuillez entrer votre numéro';
+      return 'Entre ton numéro';
     }
     if (value.length != 10) {
       return 'Le numéro doit contenir 10 chiffres';

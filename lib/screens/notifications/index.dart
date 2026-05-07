@@ -21,7 +21,8 @@ class NotificationsScreen extends ConsumerStatefulWidget {
       _NotificationsScreenState();
 }
 
-class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
+class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
+    with WidgetsBindingObserver {
   // Set pour tracker les IDs des notifications expandees
   final Set<int> _expandedNotifications = {};
 
@@ -33,11 +34,29 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Charger les notifications + le badge au montage de l'ecran.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(notificationsListProvider.notifier).load();
       ref.read(unreadCountProvider.notifier).refresh();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Refetch au retour foreground (Phase 1.3). Pas de silentRefresh sur ce
+    // notifier, on utilise le refresh existant.
+    if (state == AppLifecycleState.resumed) {
+      ref.read(notificationsListProvider.notifier).refresh();
+      ref.read(unreadCountProvider.notifier).refresh();
+    }
   }
 
   Future<void> _toggleExpand(NotificationModel notification) async {
@@ -107,6 +126,11 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
           if (unreadCount > 0)
             TextButton(
               onPressed: listState.isOperating ? null : _markAllAsRead,
+              style: TextButton.styleFrom(
+                // Hit zone POS rider : 48pt minimum (skill `zeet-pos-ergonomics` §1).
+                minimumSize: const Size(48, 48),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
               child: Text(
                 'Tout marquer comme lu',
                 style: TextStyle(
@@ -257,8 +281,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
           child: InkWell(
             onTap: () => _toggleExpand(notification),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
+              duration: ZeetMotion.md,
+              curve: ZeetCurves.standard,
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -273,7 +297,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                         // Icone
                         AnimatedScale(
                           scale: isExpanded ? 1.02 : 1.0,
-                          duration: const Duration(milliseconds: 300),
+                          duration: ZeetMotion.md,
                           child: Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
@@ -346,7 +370,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                         // Indicateur d'expansion
                         AnimatedRotation(
                           turns: isExpanded ? 0.5 : 0.0,
-                          duration: const Duration(milliseconds: 300),
+                          duration: ZeetMotion.md,
                           child: IconManager.getIcon(
                             'keyboard_arrow_down',
                             color: textLightColor,
@@ -400,7 +424,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                                 _getTypeLabel(notification.type),
                                 style: TextStyle(
                                   color: iconColor,
-                                  fontSize: 11.sp,
+                                  fontSize: 12.sp,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -458,8 +482,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                     crossFadeState: isExpanded
                         ? CrossFadeState.showSecond
                         : CrossFadeState.showFirst,
-                    duration: const Duration(milliseconds: 300),
-                    sizeCurve: Curves.easeInOut,
+                    duration: ZeetMotion.md,
+                    sizeCurve: ZeetCurves.standard,
                   ),
                 ],
               ),

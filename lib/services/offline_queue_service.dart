@@ -263,7 +263,11 @@ class OfflineQueueService {
   bool _isTransient(int? code) {
     if (code == null) return true; // pas de code = network → transient
     if (code >= 500) return true;
-    if (code == 408 || code == 409 || code == 425 || code == 429) return true;
+    // 409 = etat serveur incompatible (mission deja prise/annulee), terminal
+    // et non transient. On l'enleve pour eviter 10 retries inutiles : la
+    // branche `failed` ci-dessus marque l'action en dead-letter avec son
+    // message d'erreur (ex. "stale_409") au premier rebond.
+    if (code == 408 || code == 425 || code == 429) return true;
     return false;
   }
 

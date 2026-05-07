@@ -16,7 +16,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -25,6 +24,7 @@ import 'package:intl/intl.dart';
 import 'package:rider/core/widgets/toastification.dart';
 import 'package:rider/models/incoming_delivery_payload.dart';
 import 'package:rider/providers/incoming_delivery_provider.dart';
+import 'package:rider/screens/delivery_details/widgets/reason_picker_sheet.dart';
 import 'package:rider/screens/incoming_delivery/widgets/first_run_swipe_hint.dart';
 import 'package:rider/screens/incoming_delivery/widgets/slide_to_accept.dart';
 import 'package:rider/services/incoming_ring_bridge.dart';
@@ -56,16 +56,39 @@ class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
   bool _ringtonePlaying = false;
   bool _dismissing = false;
   int _lastSecondsRemainingHapticed = -1;
+  // Suivi de la derniere version d'erreur traitee (pour ne pas declencher
+  // le toast 409 plusieurs fois sur le meme evenement).
+  int _lastHandledErrorVersion = 0;
 
   @override
   void initState() {
     super.initState();
+    // Pulse breathing du ring de countdown. La cadence reste à 900ms
+    // (bord rythmique du ringtone). reduceMotion : on suspend la repeat
+    // dans `didChangeDependencies` pour respecter `MediaQuery.disableAnimations`
+    // (skill `zeet-motion-system` §reduceMotion).
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
-    )..repeat(reverse: true);
+    );
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _startRinging());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Toggle du pulse selon reduceMotion. En reduceMotion, on garde le ring
+    // à l'état neutre (sans pulse) pour ne pas créer de mouvement parasite.
+    final bool reduceMotion = MediaQuery.of(context).disableAnimations;
+    if (reduceMotion) {
+      if (_pulseController.isAnimating) {
+        _pulseController.stop();
+        _pulseController.value = 0.5;
+      }
+    } else if (!_pulseController.isAnimating) {
+      _pulseController.repeat(reverse: true);
+    }
   }
 
   Future<void> _startRinging() async {
@@ -92,11 +115,12 @@ class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
       debugPrint('[IncomingDeliveryScreen] ringtone fallback failed: $e');
     }
 
-    await HapticFeedback.heavyImpact();
+    await ZeetHaptics.heavy();
     _hapticTicker?.cancel();
+    // 1100ms hors échelle ZeetMotion : cadence de pulse alignée sur la sonnerie.
     _hapticTicker = Timer.periodic(const Duration(milliseconds: 1100), (_) {
       if (!mounted) return;
-      HapticFeedback.heavyImpact();
+      ZeetHaptics.heavy();
     });
   }
 
@@ -132,13 +156,37 @@ class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
         state.secondsRemaining == 1 &&
         _lastSecondsRemainingHapticed != 1) {
       _lastSecondsRemainingHapticed = 1;
-      HapticFeedback.mediumImpact();
+      ZeetHaptics.warning();
     } else if (state.secondsRemaining > 1) {
       _lastSecondsRemainingHapticed = -1;
     }
 
     if (state.phase != IncomingDeliveryPhase.ringing && _ringtonePlaying) {
       _stopRinging();
+    }
+
+    // Bug C4 — phase `error` post-accept : si 409 (mission deja prise), on
+    // ferme l'ecran avec un toast d'erreur. Pour les autres 4xx, on laisse
+    // le banner d'erreur visible (l'utilisateur peut retry) et le slide
+    // s'est deja reset via la nouvelle Key (errorResetVersion).
+    if (state.phase == IncomingDeliveryPhase.error &&
+        state.errorResetVersion != _lastHandledErrorVersion) {
+      _lastHandledErrorVersion = state.errorResetVersion;
+      if (state.errorStatusCode == 409) {
+        _dismissing = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Routes.goBack();
+          final ctx = Routes.navigatorKey.currentContext;
+          if (ctx != null) {
+            AppToast.showError(
+              context: ctx,
+              message: 'Mission déjà prise par un autre rider',
+            );
+          }
+          ref.read(incomingDeliveryProvider.notifier).dismiss();
+        });
+      }
     }
 
     if (state.phase == IncomingDeliveryPhase.accepted ||
@@ -203,7 +251,7 @@ class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
           ),
           child: SafeArea(
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 14.h),
+              padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -241,7 +289,7 @@ class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
                 'NOUVELLE LIVRAISON',
                 style: TextStyle(
                   color: _ink.withValues(alpha: 0.75),
-                  fontSize: 11.sp,
+                  fontSize: 12.sp,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 2,
                 ),
@@ -327,21 +375,23 @@ class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
     );
   }
 
-  /// Interpole vert (full) -> jaune -> rouge (expire) selon `progress`.
-  /// progress in [0, 1].
+  /// Interpole _ink (full) -> warning -> danger (expire) selon `progress`.
+  /// progress in [0, 1]. Transition lissée par interpolation linéaire entre
+  /// les 3 couleurs cible (skill `zeet-neuro-ux` §13 — pas de saut brutal).
   Color _resolveRingColor(double progress) {
-    final p = progress.clamp(0.0, 1.0);
+    final double p = progress.clamp(0.0, 1.0);
+    // Mapping : p=1.0 -> _ink ; p=0.5 -> warning ; p=0.0 -> danger.
     if (p >= 0.5) {
-      // Vert vif -> blanc (full pulse). On reste sur _ink pour preserver
-      // le contraste sur fond orange tant qu'il y a du temps.
-      return _ink;
-    } else if (p >= 0.25) {
-      // Zone d'alerte : amber
-      return const Color(0xFFFFE082);
-    } else {
-      // Urgence : rouge vif
-      return const Color(0xFFFF5252);
+      // Segment haut : _ink → warning sur [0.5, 1.0].
+      // t=0 quand p=0.5 (warning), t=1 quand p=1 (ink).
+      final double t = (p - 0.5) / 0.5;
+      return Color.lerp(ZeetColors.warning, _ink, t) ?? _ink;
     }
+    // Segment bas : danger → warning sur [0.0, 0.5].
+    // t=0 quand p=0 (danger), t=1 quand p=0.5 (warning).
+    final double t = p / 0.5;
+    return Color.lerp(ZeetColors.danger, ZeetColors.warning, t) ??
+        ZeetColors.danger;
   }
 
   // ---------------------------------------------------------------------------
@@ -380,7 +430,7 @@ class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
         SizedBox(height: 10.h),
         // Pill: distance · eta
         Container(
-          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 6.h),
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 6.h),
           decoration: BoxDecoration(
             color: _ink.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(100),
@@ -431,7 +481,7 @@ class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
 
   Widget _buildAddressesCard(IncomingDeliveryPayload p) {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 18.h),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
       decoration: BoxDecoration(
         color: _ink.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(18.r),
@@ -449,7 +499,7 @@ class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
           ),
           // Timeline separator
           Padding(
-            padding: EdgeInsets.only(left: 22.w, top: 8.h, bottom: 8.h),
+            padding: EdgeInsets.only(left: 24.w, top: 8.h, bottom: 8.h),
             child: Column(
               children: List.generate(
                 3,
@@ -514,7 +564,7 @@ class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
               minimumSize: Size(48.w, 36.h),
             ),
             child: Text(
-              'Reessayer',
+              'Réessayer',
               style: TextStyle(
                 fontSize: 13.sp,
                 fontWeight: FontWeight.w800,
@@ -540,7 +590,12 @@ class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
         // Skill `zeet-gesture-grammar` §6 (discoverability).
         const FirstRunSwipeHint(),
         SlideToAcceptButton(
-          key: ValueKey(state.payload?.deliveryId ?? 0),
+          // Bug C4 — la Key inclut errorResetVersion : a chaque erreur
+          // 4xx non transient, le widget est re-mount → le slide revient
+          // a 0 (reset visuel garanti).
+          key: ValueKey(
+            '${state.payload?.deliveryId ?? 0}_${state.errorResetVersion}',
+          ),
           label: busy ? 'CONFIRMATION...' : 'GLISSER POUR ACCEPTER',
           enabled: !busy && state.phase == IncomingDeliveryPhase.ringing,
           onCompleted: () {
@@ -574,59 +629,32 @@ class _IncomingDeliveryScreenState extends ConsumerState<IncomingDeliveryScreen>
     await _stopRinging();
     if (!mounted) return;
 
-    final controller = TextEditingController();
-    final reason = await showDialog<String>(
+    // ReasonPickerSheet (presets + champ libre + swipe-to-confirm)
+    // — remplace l'ancien AlertDialog. Skill ZEET zeet-gesture-grammar
+    // §swipe-to-confirm pour action irreversible.
+    final result = await ReasonPickerSheet.show(
       context: context,
-      barrierDismissible: true,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Refuser la livraison'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Indique la raison. La course sera proposee a un autre rider.',
-                style: TextStyle(fontSize: 13.sp),
-              ),
-              SizedBox(height: 12.h),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  hintText: 'Ex: Trop loin, pneu creve, fin de service...',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Annuler'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _bg,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () {
-                final v = controller.text.trim();
-                if (v.isNotEmpty) Navigator.pop(ctx, v);
-              },
-              child: const Text('Refuser'),
-            ),
-          ],
-        );
-      },
+      title: 'Refuser la livraison',
+      description:
+          'Choisis un motif. La course sera proposee a un autre rider.',
+      presets: const <String>[
+        'Trop loin',
+        'Pneu creve',
+        'Fin de service',
+        'Autre',
+      ],
+      includeGeo: false,
     );
 
     if (!mounted) return;
 
-    if (reason != null) {
-      await ref.read(incomingDeliveryProvider.notifier).reject(reason: reason);
+    if (result != null && result.reason.isNotEmpty) {
+      await ref
+          .read(incomingDeliveryProvider.notifier)
+          .reject(reason: result.reason);
     } else {
-      // Annulation du dialog → on relance la sonnerie, la livraison est toujours active.
+      // Annulation du sheet → on relance la sonnerie, la livraison est
+      // toujours active.
       if (ref.read(incomingDeliveryProvider).phase ==
           IncomingDeliveryPhase.ringing) {
         await _startRinging();
@@ -669,7 +697,7 @@ class _AddressRow extends StatelessWidget {
                 label.toUpperCase(),
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.75),
-                  fontSize: 11.sp,
+                  fontSize: 12.sp,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.2,
                 ),

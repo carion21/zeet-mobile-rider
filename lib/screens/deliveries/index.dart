@@ -119,9 +119,11 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen>
             ),
           ),
           const Spacer(),
-          // Bouton de rafraichissement
+          // Bouton de rafraîchissement (hit zone POS 56pt — skill §1).
           IconButton(
-            icon: IconManager.getIcon('refresh', color: textColor, size: 22),
+            icon: IconManager.getIcon('refresh', color: textColor, size: 24),
+            iconSize: 28,
+            tooltip: 'Rafraîchir',
             onPressed: () => ref.read(missionsListProvider.notifier).refresh(),
           ),
         ],
@@ -182,7 +184,7 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen>
                       '${missionsState.available.length}',
                       style: TextStyle(
                         color: AppColors.primary,
-                        fontSize: 10.sp,
+                        fontSize: 12.sp,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -209,7 +211,7 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen>
                       '${missionsState.ongoing.length}',
                       style: TextStyle(
                         color: AppColors.primary,
-                        fontSize: 10.sp,
+                        fontSize: 12.sp,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -315,18 +317,18 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen>
     Color textLightColor,
     Color surfaceColor,
   ) {
+    final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
+        // BoxShadow flottant interdit (skill `zeet-design-system` §2). On
+        // utilise une bordure 1px sur la ligne du DS pour la séparation.
+        border: Border.all(
+          color: isDarkMode ? ZeetColors.lineDark : ZeetColors.line,
+          width: 1,
+        ),
       ),
       child: InkWell(
         onTap: () {
@@ -486,7 +488,7 @@ class _DeliveriesScreenState extends ConsumerState<DeliveriesScreen>
             text,
             style: TextStyle(
               color: color,
-              fontSize: 11.sp,
+              fontSize: 12.sp,
               fontWeight: FontWeight.w500,
             ),
           ),

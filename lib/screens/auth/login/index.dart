@@ -7,6 +7,7 @@ import 'package:rider/core/constants/icons.dart';
 import 'package:rider/core/widgets/toastification.dart';
 import 'package:rider/providers/auth_provider.dart';
 import 'package:rider/services/navigation_service.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'controllers.dart';
@@ -76,7 +77,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final textLightColor = isDarkMode ? AppColors.darkTextLight : AppColors.textLight;
     final backgroundColor = isDarkMode ? AppColors.darkBackground : Colors.white;
     final surfaceColor = isDarkMode ? AppColors.darkSurface : Colors.white;
-    final borderColor = isDarkMode ? AppColors.darkTextLight.withValues(alpha: 0.2) : const Color(0xFFEEEEEE);
+    final borderColor = isDarkMode ? AppColors.darkTextLight.withValues(alpha: 0.2) : ZeetColors.line;
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -122,7 +123,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                 // Sous-titre
                 Text(
-                  'Entrez votre numéro pour accéder\nà vos livraisons',
+                  'Entre ton numéro pour accéder\nà tes livraisons',
                   style: TextStyle(
                     fontSize: 15.sp,
                     color: textLightColor,

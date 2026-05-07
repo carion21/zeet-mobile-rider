@@ -26,6 +26,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:rider/core/constants/icons.dart';
+import 'package:rider/providers/daily_goal_provider.dart';
+import 'package:rider/providers/earnings_provider.dart';
 import 'package:rider/providers/main_tab_provider.dart';
 import 'package:zeet_ui/zeet_ui.dart';
 
@@ -39,6 +41,22 @@ class EarningsHeroCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final summary = ref.watch(earningsSummaryProvider).summary;
+    final int deliveries = summary?.completedDeliveries ?? 0;
+    final double avgPerDelivery = deliveries > 0
+        ? (summary?.averagePerDelivery ?? (dailyEarnings / deliveries))
+        : 0;
+    final double tips = summary?.tips ?? 0;
+    final double bonuses = summary?.bonuses ?? 0;
+    // Plan §3.2 : barre de progression vers objectif courses/jour si
+    // l'objectif est défini (opt-in via tile Home). Skill `zeet-neuro-ux`
+    // §11 peak moment — feedback immédiat sur la progression.
+    final int dailyGoal = ref.watch(dailyGoalProvider);
+    final bool hasGoal = dailyGoal > 0;
+    final double goalProgress = hasGoal
+        ? (deliveries / dailyGoal).clamp(0.0, 1.0)
+        : 0.0;
+
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Tokens contrastes maximaux. Ratios mesures :
@@ -146,6 +164,147 @@ class EarningsHeroCard extends ConsumerWidget {
                             ),
                           ),
                         ),
+                        // Sous-ligne : nombre de courses + moyenne par
+                        // course. Aide a contextualiser le montant brut
+                        // (skill `zeet-neuro-ux` §13 — un chiffre seul
+                        // n'est pas une histoire). Cachee si aucune
+                        // course livree aujourd'hui.
+                        if (deliveries > 0) ...<Widget>[
+                          SizedBox(height: 10.h),
+                          Container(height: 1, color: borderColor),
+                          SizedBox(height: 10.h),
+                          Row(
+                            children: <Widget>[
+                              Icon(
+                                Icons.two_wheeler_rounded,
+                                color: mutedColor,
+                                size: 14.sp,
+                              ),
+                              SizedBox(width: 4.w),
+                              Text(
+                                deliveries == 1
+                                    ? '1 course'
+                                    : '$deliveries courses',
+                                style: TextStyle(
+                                  color: mutedColor,
+                                  fontSize: 12.sp,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              if (avgPerDelivery > 0) ...<Widget>[
+                                Text(
+                                  '  ·  ',
+                                  style: TextStyle(
+                                    color: mutedColor,
+                                    fontSize: 12.sp,
+                                  ),
+                                ),
+                                Text(
+                                  'Moy. ',
+                                  style: TextStyle(
+                                    color: mutedColor,
+                                    fontSize: 12.sp,
+                                  ),
+                                ),
+                                ZeetMoney(
+                                  amount: avgPerDelivery,
+                                  currency: ZeetCurrency.fcfa,
+                                  style: TextStyle(
+                                    color: mutedColor,
+                                    fontSize: 12.sp,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                Text(
+                                  ' / course',
+                                  style: TextStyle(
+                                    color: mutedColor,
+                                    fontSize: 12.sp,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
+                        // Barre de progression vers objectif courses/jour
+                        // (plan §3.2). Affichée seulement si objectif défini.
+                        // Skill `zeet-neuro-ux` §11 (peak moment, gamification
+                        // opt-in) + `zeet-motion-system` (snappy < 200ms).
+                        if (hasGoal) ...<Widget>[
+                          SizedBox(height: 12.h),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: <Widget>[
+                              Text(
+                                'Objectif du jour',
+                                style: TextStyle(
+                                  color: mutedColor,
+                                  fontSize: 11.sp,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                '$deliveries / $dailyGoal',
+                                style: TextStyle(
+                                  color: amountColor,
+                                  fontSize: 11.sp,
+                                  fontWeight: FontWeight.w800,
+                                  fontFeatures: const <FontFeature>[
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 6.h),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4.r),
+                            child: TweenAnimationBuilder<double>(
+                              tween: Tween<double>(begin: 0, end: goalProgress),
+                              duration: ZeetMotion.md,
+                              curve: ZeetCurves.decelerate,
+                              builder: (_, double v, __) =>
+                                  LinearProgressIndicator(
+                                value: v,
+                                minHeight: 6.h,
+                                backgroundColor: borderColor,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  goalProgress >= 1.0
+                                      ? ZeetColors.success
+                                      : ZeetColors.primary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                        // Chips pourboires/primes — visibles seulement
+                        // si > 0 pour eviter de polluer l'ecran. Skill
+                        // `zeet-neuro-ux` §12bis (dopamine instantanee).
+                        if (tips > 0 || bonuses > 0) ...<Widget>[
+                          SizedBox(height: 10.h),
+                          Wrap(
+                            spacing: 8.w,
+                            runSpacing: 6.h,
+                            children: <Widget>[
+                              if (tips > 0)
+                                _BonusChip(
+                                  icon: Icons.volunteer_activism_rounded,
+                                  label: 'Pourboires',
+                                  amount: tips,
+                                  bg: ZeetColors.successBg,
+                                  fg: ZeetColors.successText,
+                                ),
+                              if (bonuses > 0)
+                                _BonusChip(
+                                  icon: Icons.card_giftcard_rounded,
+                                  label: 'Prime',
+                                  amount: bonuses,
+                                  bg: ZeetColors.primaryLight,
+                                  fg: ZeetColors.primary,
+                                ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -154,6 +313,60 @@ class EarningsHeroCard extends ConsumerWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _BonusChip extends StatelessWidget {
+  const _BonusChip({
+    required this.icon,
+    required this.label,
+    required this.amount,
+    required this.bg,
+    required this.fg,
+  });
+
+  final IconData icon;
+  final String label;
+  final double amount;
+  final Color bg;
+  final Color fg;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(ZeetRadius.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Icon(icon, color: fg, size: 14.sp),
+          SizedBox(width: 5.w),
+          Text(
+            '$label +',
+            style: TextStyle(
+              color: fg,
+              fontSize: 12.sp,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          ZeetMoney(
+            amount: amount,
+            currency: ZeetCurrency.fcfa,
+            style: TextStyle(
+              color: fg,
+              fontSize: 12.sp,
+              fontWeight: FontWeight.w800,
+              fontFeatures: const <FontFeature>[
+                FontFeature.tabularFigures(),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

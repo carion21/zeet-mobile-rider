@@ -215,7 +215,7 @@ class _MiniInfoItem extends StatelessWidget {
                     fontSize: 15.sp,
                     fontWeight: FontWeight.bold)),
             Text(label,
-                style: TextStyle(color: textLightColor, fontSize: 11.sp)),
+                style: TextStyle(color: textLightColor, fontSize: 12.sp)),
           ],
         ),
       ],

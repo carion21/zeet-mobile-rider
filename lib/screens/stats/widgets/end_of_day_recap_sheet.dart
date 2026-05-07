@@ -9,7 +9,6 @@
 // Skill `zeet-micro-copy` (rider direct camarade).
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:zeet_ui/zeet_ui.dart';
 
@@ -73,7 +72,7 @@ class _EndOfDayRecapSheetState extends State<_EndOfDayRecapSheet> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Haptic success au mount (skill `zeet-motion-system` §10).
-      HapticFeedback.lightImpact();
+      ZeetHaptics.success();
 
       // Respect reduceMotion : pas de cascade, affichage direct des
       // valeurs (skill `zeet-motion-system` §14).
@@ -97,25 +96,25 @@ class _EndOfDayRecapSheetState extends State<_EndOfDayRecapSheet> {
       // creer une memoire tactile distincte par KPI.
       Future<void>.delayed(const Duration(milliseconds: 150), () {
         if (!mounted) return;
-        HapticFeedback.selectionClick();
+        ZeetHaptics.tap();
         setState(() => _displayedDeliveries = widget.deliveries);
       });
       Future<void>.delayed(const Duration(milliseconds: 350), () {
         if (!mounted) return;
-        HapticFeedback.selectionClick();
+        ZeetHaptics.tap();
         setState(() => _displayedEarnings = widget.earnings);
       });
       if (widget.distanceKm != null) {
         Future<void>.delayed(const Duration(milliseconds: 550), () {
           if (!mounted) return;
-          HapticFeedback.selectionClick();
+          ZeetHaptics.tap();
           setState(() => _displayedDistance = widget.distanceKm!);
         });
       }
       if (widget.ratingAvg != null) {
         Future<void>.delayed(const Duration(milliseconds: 750), () {
           if (!mounted) return;
-          HapticFeedback.selectionClick();
+          ZeetHaptics.tap();
           setState(() => _displayedRating = widget.ratingAvg!);
         });
       }
@@ -249,7 +248,7 @@ class _RecapKpi extends StatelessWidget {
   Widget build(BuildContext context) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(14.r),
@@ -257,7 +256,7 @@ class _RecapKpi extends StatelessWidget {
       child: Row(
         children: <Widget>[
           Container(
-            padding: EdgeInsets.all(10.w),
+            padding: EdgeInsets.all(12.w),
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(10.r),

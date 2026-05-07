@@ -1,14 +1,17 @@
 // FcmService — branche Firebase Cloud Messaging sur l'app rider.
 //
 // Responsabilites :
-//  - Demander la permission notifications (Android 13+)
 //  - Recuperer le token FCM et l'injecter dans DeviceTokenManager
 //  - Ecouter onTokenRefresh (rotation de token)
 //  - Router les messages recus (foreground, tap-from-background, cold-start)
-//    vers un callback fourni par l'appelant
-//  - En Phase 3 : quand un message arrive alors que l'app est killed ou
-//    en background profond, afficher une notification FullScreenIntent
-//    via LocalNotificationService (reveille l'ecran + sonne fort).
+//    vers un callback fourni par l'appelant (zero filtre dans le service)
+//  - Quand un message arrive en background profond / app killed, afficher
+//    une notification FullScreenIntent via LocalNotificationService
+//    (reveille l'ecran + sonne fort) — specifique rider, critique mission.
+//
+// Cote rider, le callback sera typiquement `MissionStatusDispatcher.handleRaw`
+// qui patche les providers Riverpod (silentRefresh) et delegue les "incoming
+// offer" a `IncomingDeliveryDispatcher`.
 
 import 'dart:async';
 
@@ -16,12 +19,17 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
+import 'package:rider/models/incoming_delivery_payload.dart';
 import 'package:rider/services/device_token_manager.dart';
 import 'package:rider/services/local_notification_service.dart';
 
+/// Signature du callback appele pour dispatcher un payload recu.
 typedef FcmDataHandler = Future<void> Function(Map<String, dynamic> data);
 
 /// Handler background top-level obligatoire pour FirebaseMessaging.
+/// Specifique rider : on declenche systematiquement la notif locale
+/// FullScreenIntent pour les "delivery.offer" / "new_delivery" afin de
+/// reveiller un livreur en background profond (3s pour accepter une mission).
 @pragma('vm:entry-point')
 Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
@@ -42,12 +50,17 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
       data['body'] ??= notif.body;
     }
 
-    final title = (data['title']?.toString().isNotEmpty ?? false)
-        ? data['title'].toString()
-        : 'Nouvelle livraison';
-    final body = (data['body']?.toString().isNotEmpty ?? false)
-        ? data['body'].toString()
-        : 'Appuyez pour voir les details';
+    // Plan §3.4 : titre/body formatés lock-screen friendly à partir du
+    // payload typé. Fallback sur les champs bruts si parse échoue.
+    final parsed = IncomingDeliveryPayload.tryParse(data);
+    final title = parsed?.lockScreenTitle ??
+        ((data['title']?.toString().isNotEmpty ?? false)
+            ? data['title'].toString()
+            : 'Nouvelle livraison');
+    final body = parsed?.lockScreenBody ??
+        ((data['body']?.toString().isNotEmpty ?? false)
+            ? data['body'].toString()
+            : 'Appuyez pour voir les details');
 
     await LocalNotificationService.showIncomingDelivery(
       title: title,
@@ -61,6 +74,7 @@ class FcmService {
   static FcmService? _instance;
 
   FcmDataHandler? _onDataMessage;
+  FcmDataHandler? _onMessageTap;
   StreamSubscription<RemoteMessage>? _onMessageSub;
   StreamSubscription<RemoteMessage>? _onOpenedAppSub;
   StreamSubscription<String>? _onTokenRefreshSub;
@@ -75,6 +89,11 @@ class FcmService {
 
   /// Initialise les listeners FCM + local notifications + channels.
   ///
+  /// [onDataMessage] : invoque pour tous les messages recus en foreground.
+  /// [onMessageTap]  : invoque quand l'utilisateur tape une notification
+  ///   (background ou cold-start). Si absent, `onDataMessage` est utilise
+  ///   par defaut.
+  ///
   /// Par défaut **ne demande PAS** la permission système (`promptPermission:
   /// false`) — le pre-prompt custom `NotifRationaleSheet` doit être affiché
   /// avant, côté écran d'accueil post-auth. Cela évite de brûler la chance
@@ -86,14 +105,17 @@ class FcmService {
   /// Cf. zeet-notification-strategy §8 — "ask in context".
   Future<void> init({
     required FcmDataHandler onDataMessage,
+    FcmDataHandler? onMessageTap,
     bool promptPermission = false,
   }) async {
     if (_initialized) {
       _onDataMessage = onDataMessage;
+      _onMessageTap = onMessageTap;
       return;
     }
     _initialized = true;
     _onDataMessage = onDataMessage;
+    _onMessageTap = onMessageTap;
 
     final messaging = FirebaseMessaging.instance;
 
@@ -105,20 +127,32 @@ class FcmService {
           '[FcmService] local notif tapped: '
           'type=${payload['type_value'] ?? payload['type']}',
         );
-        await _onDataMessage?.call(payload);
+        // Tap d'une notif locale -> traite comme un tap utilisateur.
+        final FcmDataHandler? handler = _onMessageTap ?? _onDataMessage;
+        await handler?.call(payload);
       },
+    );
+
+    // iOS : on NE force PAS la banniere FCM systeme en foreground. Le
+    // dispatcher foreground gere l'affichage in-app (toast / IncomingDelivery
+    // plein ecran) — coherent avec le design ZEET, evite le doublon.
+    await messaging.setForegroundNotificationPresentationOptions(
+      alert: false,
+      badge: true,
+      sound: false,
     );
 
     if (promptPermission) {
       await requestPushPermission();
     }
 
-    _onTokenRefreshSub = messaging.onTokenRefresh.listen((token) async {
+    _onTokenRefreshSub = messaging.onTokenRefresh.listen((token) {
       debugPrint(
         '[FcmService] token refreshed: ${token.substring(0, 16)}...',
       );
       DeviceTokenManager.instance.setPushToken(token);
-      await DeviceTokenManager.instance.registerCurrentDevice();
+      // Fire-and-forget : ne JAMAIS bloquer sur le register.
+      unawaited(DeviceTokenManager.instance.registerCurrentDevice());
     });
 
     _onMessageSub = FirebaseMessaging.onMessage.listen((message) {
@@ -126,7 +160,7 @@ class FcmService {
         '[FcmService] foreground message: '
         'type=${message.data['type_value'] ?? message.data['type']}',
       );
-      _dispatch(message);
+      _dispatch(message, tap: false);
     });
 
     _onOpenedAppSub = FirebaseMessaging.onMessageOpenedApp.listen((message) {
@@ -134,13 +168,21 @@ class FcmService {
         '[FcmService] opened from background: '
         'type=${message.data['type_value'] ?? message.data['type']}',
       );
-      _dispatch(message);
+      _dispatch(message, tap: true);
     });
 
-    // Note : le cold-start (getInitialMessage / getLaunchPayload) est
-    // desormais gere AVANT runApp par `NotificationLaunchRouter.capture()`
-    // et route par le SplashScreen. Evite un double dispatch qui ferait
-    // clignoter le home entre le splash et l'ecran cible.
+    // Cold-start : laisser splash/auth se resoudre avant de dispatcher.
+    // Note : cote rider, le `NotificationLaunchRouter.capture()` (appele
+    // dans main() AVANT runApp) capture deja le payload offer pour le
+    // SplashScreen. On garde malgre tout `getInitialMessage()` ici pour
+    // les types non-offer (status_changed, mission_cancelled...) qui ne
+    // sont pas captes par le router cold-start.
+    final initial = await messaging.getInitialMessage();
+    if (initial != null) {
+      Future.delayed(const Duration(milliseconds: 800), () {
+        _dispatch(initial, tap: true);
+      });
+    }
   }
 
   /// Déclenche la demande de permission notification système + enregistrement
@@ -161,11 +203,25 @@ class FcmService {
     );
 
     try {
+      // iOS : l'APNs token est le maillon critique. S'il est null, Firebase
+      // ne pourra JAMAIS livrer de push, meme si getToken() retourne une
+      // string. Cause typique : entitlement `aps-environment` manquant,
+      // App ID sans capability Push, ou provisioning profile non regenere.
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        final apns = await messaging.getAPNSToken();
+        debugPrint(
+          '[FcmService] APNs token: ${apns ?? "NULL (iOS push KO)"}',
+        );
+      }
+
       final token = await messaging.getToken();
       if (token != null && token.isNotEmpty) {
         DeviceTokenManager.instance.setPushToken(token);
         debugPrint('[FcmService] FCM token: ${token.substring(0, 16)}...');
-        await DeviceTokenManager.instance.registerCurrentDevice();
+        // Fire-and-forget (cf. note sur registerCurrentDevice).
+        unawaited(DeviceTokenManager.instance.registerCurrentDevice());
+      } else {
+        debugPrint('[FcmService] getToken() returned null or empty');
       }
     } catch (e) {
       debugPrint('[FcmService] getToken failed: $e');
@@ -174,10 +230,8 @@ class FcmService {
     return settings.authorizationStatus;
   }
 
-  void _dispatch(RemoteMessage message) {
-    final handler = _onDataMessage;
-    if (handler == null) return;
-    final data = Map<String, dynamic>.from(message.data);
+  void _dispatch(RemoteMessage message, {required bool tap}) {
+    final Map<String, dynamic> data = Map<String, dynamic>.from(message.data);
 
     final notif = message.notification;
     if (notif != null) {
@@ -185,9 +239,15 @@ class FcmService {
       data['body'] ??= notif.body;
     }
 
+    // Hide la notif locale "incoming delivery" si elle etait affichee :
+    // l'utilisateur revient au foreground via un autre canal.
     LocalNotificationService.cancelIncomingDelivery();
 
-    handler(data);
+    // Tap -> handler dedie (navigation) ; fallback sur onDataMessage.
+    // Foreground -> handler data (silent refresh + presentation in-app).
+    final FcmDataHandler? handler =
+        tap ? (_onMessageTap ?? _onDataMessage) : _onDataMessage;
+    handler?.call(data);
   }
 
   Future<void> dispose() async {

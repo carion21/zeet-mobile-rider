@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/models/rider_stats_model.dart';
 import 'package:rider/services/api_client.dart';
+import 'package:rider/services/cache_policies.dart';
 import 'package:rider/services/stats_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -52,13 +53,29 @@ class RiderStatsState {
 // ---------------------------------------------------------------------------
 class RiderStatsNotifier extends StateNotifier<RiderStatsState> {
   final StatsService _service;
+  DateTime? _lastFetchedAt;
 
   RiderStatsNotifier(this._service) : super(const RiderStatsState());
 
   /// Charge les statistiques.
   ///
   /// [dateFrom] / [dateTo] : ISO 8601 dates optionnelles.
-  Future<void> load({String? dateFrom, String? dateTo}) async {
+  /// [force] : si `true`, ignore le TTL [CachePolicy.stats] (5 min).
+  Future<void> load({
+    String? dateFrom,
+    String? dateTo,
+    bool force = false,
+  }) async {
+    // Court-circuit cache : meme periode, donnees fraiches → no-op.
+    if (!force &&
+        _lastFetchedAt != null &&
+        CachePolicies.fresh(CachePolicy.stats, _lastFetchedAt!) &&
+        state.stats != null &&
+        state.currentDateFrom == dateFrom &&
+        state.currentDateTo == dateTo) {
+      return;
+    }
+
     state = state.copyWith(
       isLoading: true,
       clearError: true,
@@ -76,12 +93,15 @@ class RiderStatsNotifier extends StateNotifier<RiderStatsState> {
       final stats = RiderStats.fromJson(data);
 
       state = state.copyWith(stats: stats, isLoading: false);
+      _lastFetchedAt = DateTime.now();
     } on ApiException catch (e) {
+      _lastFetchedAt = null;
       state = state.copyWith(
         isLoading: false,
         errorMessage: e.message,
       );
     } catch (_) {
+      _lastFetchedAt = null;
       state = state.copyWith(
         isLoading: false,
         errorMessage: 'Impossible de charger les statistiques',
@@ -89,10 +109,11 @@ class RiderStatsNotifier extends StateNotifier<RiderStatsState> {
     }
   }
 
-  /// Rafraichit la periode courante.
+  /// Rafraichit la periode courante (force refresh, bypass cache).
   Future<void> refresh() => load(
         dateFrom: state.currentDateFrom,
         dateTo: state.currentDateTo,
+        force: true,
       );
 }
 

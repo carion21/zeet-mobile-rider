@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/models/availability_log_model.dart';
 import 'package:rider/providers/status_provider.dart';
 import 'package:rider/services/api_client.dart';
+import 'package:rider/services/cache_policies.dart';
 import 'package:rider/services/status_service.dart';
 
 class AvailabilityLogState {
@@ -50,12 +51,23 @@ class AvailabilityLogState {
 
 class AvailabilityLogNotifier extends StateNotifier<AvailabilityLogState> {
   final StatusService _service;
+  DateTime? _lastFetchedAt;
 
   AvailabilityLogNotifier(this._service) : super(const AvailabilityLogState());
 
   static const int _pageSize = 25;
 
-  Future<void> load() async {
+  /// Charge la premiere page de l'historique online/offline.
+  /// [force] : si `true`, ignore le TTL [CachePolicy.availabilityLog] (5 min).
+  Future<void> load({bool force = false}) async {
+    // Court-circuit cache : page 1 fraiche → no-op.
+    if (!force &&
+        _lastFetchedAt != null &&
+        CachePolicies.fresh(CachePolicy.availabilityLog, _lastFetchedAt!) &&
+        state.entries.isNotEmpty) {
+      return;
+    }
+
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final result = await _service.getAvailabilityLog(
@@ -67,9 +79,12 @@ class AvailabilityLogNotifier extends StateNotifier<AvailabilityLogState> {
         meta: result.meta,
         isLoading: false,
       );
+      _lastFetchedAt = DateTime.now();
     } on ApiException catch (e) {
+      _lastFetchedAt = null;
       state = state.copyWith(isLoading: false, errorMessage: e.message);
     } catch (e) {
+      _lastFetchedAt = null;
       debugPrint('[AvailabilityLog] load error: $e');
       state = state.copyWith(
         isLoading: false,
@@ -103,7 +118,7 @@ class AvailabilityLogNotifier extends StateNotifier<AvailabilityLogState> {
     }
   }
 
-  Future<void> refresh() => load();
+  Future<void> refresh() => load(force: true);
 }
 
 final availabilityLogProvider =

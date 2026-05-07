@@ -19,7 +19,6 @@
 // (pas de concurrence : les 2 providers coexistent).
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
@@ -60,6 +59,10 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
       _loadForCurrentPreset();
       // Le chart "gains par jour" continue d'utiliser earnings_provider.
       ref.read(earningsSummaryProvider.notifier).load(period: 'month');
+      // Historique des transactions (gains/jour, primes, pourboires) —
+      // backend `/v1/rider/earnings/history`. Charge la 1ere page,
+      // l'utilisateur peut paginer via le bouton "Voir plus".
+      ref.read(earningsHistoryProvider.notifier).load();
     });
   }
 
@@ -122,7 +125,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
 
   Future<void> _onPresetTap(_StatsPreset preset) async {
     if (_preset == preset) return;
-    HapticFeedback.selectionClick();
+    ZeetHaptics.tap();
     setState(() => _preset = preset);
     await Future.wait([
       _loadForCurrentPreset(),
@@ -134,7 +137,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
   }
 
   Future<void> _refreshAll() async {
-    HapticFeedback.lightImpact();
+    ZeetHaptics.success();
     await Future.wait([
       _loadForCurrentPreset(),
       ref
@@ -157,7 +160,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
     final textLightColor =
         isDarkMode ? AppColors.darkTextLight : AppColors.textLight;
     final backgroundColor =
-        isDarkMode ? AppColors.darkBackground : const Color(0xFFF8F8F8);
+        isDarkMode ? AppColors.darkBackground : ZeetColors.surfaceAlt;
     final surfaceColor = isDarkMode ? AppColors.darkSurface : Colors.white;
 
     AppSizes().initialize(context);
@@ -171,7 +174,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
         // MainScaffold, on revient au Home via la bottom nav.
         automaticallyImplyLeading: false,
         title: Text(
-          'Statistiques',
+          'Mes gains',
           style: TextStyle(
             color: textColor,
             fontSize: 18.sp,
@@ -303,7 +306,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           TextButton(
             onPressed: _refreshAll,
             child: Text(
-              'Reessayer',
+              'Réessayer',
               style: TextStyle(
                 color: AppColors.primary,
                 fontSize: 14.sp,
@@ -417,6 +420,13 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                     textLightColor,
                     isDarkMode,
                   ),
+                  SizedBox(height: 16.h),
+                  _EarningsHistorySection(
+                    surfaceColor: surfaceColor,
+                    textColor: textColor,
+                    textLightColor: textLightColor,
+                    isDarkMode: isDarkMode,
+                  ),
                 ],
               ],
             ),
@@ -520,7 +530,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           ),
           SizedBox(height: 4.h),
           Text(
-            '${stats.deliveredCount} livraison${stats.deliveredCount > 1 ? 's' : ''} reussie${stats.deliveredCount > 1 ? 's' : ''}',
+            '${stats.deliveredCount} livraison${stats.deliveredCount > 1 ? 's' : ''} réussie${stats.deliveredCount > 1 ? 's' : ''}',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.9),
               fontSize: 13.sp,
@@ -686,7 +696,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           SizedBox(height: 6.h),
           Text(
             helper,
-            style: TextStyle(color: textLightColor, fontSize: 11.sp),
+            style: TextStyle(color: textLightColor, fontSize: 12.sp),
           ),
         ],
       ),
@@ -722,13 +732,13 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
             width: 56.w,
             height: 56.w,
             decoration: BoxDecoration(
-              color: const Color(0xFFFFC107).withValues(alpha: 0.15),
+              color: ZeetColors.starGold.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(14.r),
             ),
             child: Center(
               child: IconManager.getIcon(
                 'star',
-                color: const Color(0xFFFFC107),
+                color: ZeetColors.starGold,
                 size: 28,
               ),
             ),
@@ -875,7 +885,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                 primaryXAxis: CategoryAxis(
                   majorGridLines: const MajorGridLines(width: 0),
                   labelStyle:
-                      TextStyle(color: textLightColor, fontSize: 11.sp),
+                      TextStyle(color: textLightColor, fontSize: 12.sp),
                 ),
                 primaryYAxis: NumericAxis(
                   majorGridLines: MajorGridLines(
@@ -885,7 +895,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                         : Colors.grey.withValues(alpha: 0.1),
                   ),
                   labelStyle:
-                      TextStyle(color: textLightColor, fontSize: 11.sp),
+                      TextStyle(color: textLightColor, fontSize: 12.sp),
                   numberFormat: NumberFormat.compact(locale: 'fr_FR'),
                 ),
                 series: <CartesianSeries>[
@@ -987,7 +997,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           SizedBox(height: 2.h),
           Text(
             label,
-            style: TextStyle(color: textLightColor, fontSize: 11.sp),
+            style: TextStyle(color: textLightColor, fontSize: 12.sp),
           ),
         ],
       ),
@@ -1000,4 +1010,259 @@ class _ChartData {
   final double value;
 
   const _ChartData(this.label, this.value);
+}
+
+// ---------------------------------------------------------------------------
+// Earnings history section (transactions list — alimente le nouveau onglet
+// "Gains"). Source : `earningsHistoryProvider` (GET /v1/rider/earnings/history).
+// Etats ELOE : loading skeleton / error retry / empty / list paginee.
+// ---------------------------------------------------------------------------
+
+class _EarningsHistorySection extends ConsumerWidget {
+  const _EarningsHistorySection({
+    required this.surfaceColor,
+    required this.textColor,
+    required this.textLightColor,
+    required this.isDarkMode,
+  });
+
+  final Color surfaceColor;
+  final Color textColor;
+  final Color textLightColor;
+  final bool isDarkMode;
+
+  /// Limite l'affichage initial pour ne pas exploser le scroll. L'utilisateur
+  /// peut paginer avec le bouton "Voir plus".
+  static const int _previewLimit = 10;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(earningsHistoryProvider);
+    final notifier = ref.read(earningsHistoryProvider.notifier);
+    final Color borderColor =
+        isDarkMode ? ZeetColors.lineDark : ZeetColors.line;
+
+    final List<EarningsEntry> visible =
+        state.entries.take(_previewLimit + (state.currentPage - 1) * 10).toList();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(ZeetRadius.md),
+        border: Border.all(color: borderColor, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Padding(
+            padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 8.h),
+            child: Row(
+              children: <Widget>[
+                Icon(Icons.receipt_long_rounded,
+                    color: textLightColor, size: 18.sp),
+                SizedBox(width: 8.w),
+                Text(
+                  'Historique des transactions',
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 15.sp,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (state.isLoading && state.entries.isEmpty)
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+              child: const ZeetSkeletonList(itemCount: 4, itemHeight: 56),
+            )
+          else if (state.errorMessage != null && state.entries.isEmpty)
+            Padding(
+              padding: EdgeInsets.all(16.w),
+              child: ZeetErrorState(
+                kind: ZeetErrorKind.generic,
+                description: state.errorMessage,
+                onRetry: () => notifier.refresh(),
+                compact: true,
+              ),
+            )
+          else if (state.entries.isEmpty)
+            Padding(
+              padding: EdgeInsets.all(20.w),
+              child: Center(
+                child: Text(
+                  'Aucune transaction sur cette période.',
+                  style: TextStyle(color: textLightColor, fontSize: 13.sp),
+                ),
+              ),
+            )
+          else
+            ...visible.map<Widget>(
+              (entry) => _EarningsEntryTile(
+                entry: entry,
+                textColor: textColor,
+                textLightColor: textLightColor,
+                borderColor: borderColor,
+              ),
+            ),
+          if (state.hasMore && state.entries.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+              child: Center(
+                child: TextButton.icon(
+                  onPressed: state.isLoadingMore
+                      ? null
+                      : () => notifier.loadMore(),
+                  icon: state.isLoadingMore
+                      ? SizedBox(
+                          width: 14.sp,
+                          height: 14.sp,
+                          child: const CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: ZeetColors.primary,
+                          ),
+                        )
+                      : Icon(Icons.expand_more_rounded,
+                          color: ZeetColors.primary, size: 18.sp),
+                  label: Text(
+                    state.isLoadingMore ? 'Chargement…' : 'Voir plus',
+                    style: TextStyle(
+                      color: ZeetColors.primary,
+                      fontSize: 13.sp,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EarningsEntryTile extends StatelessWidget {
+  const _EarningsEntryTile({
+    required this.entry,
+    required this.textColor,
+    required this.textLightColor,
+    required this.borderColor,
+  });
+
+  final EarningsEntry entry;
+  final Color textColor;
+  final Color textLightColor;
+  final Color borderColor;
+
+  String _formatDate(String? raw) {
+    if (raw == null || raw.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(raw).toLocal();
+      return DateFormat('d MMM, HH:mm', 'fr_FR').format(dt);
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  IconData _iconForType() {
+    switch (entry.type) {
+      case 'tip':
+        return Icons.volunteer_activism_rounded;
+      case 'bonus':
+        return Icons.card_giftcard_rounded;
+      case 'penalty':
+        return Icons.remove_circle_outline_rounded;
+      case 'adjustment':
+        return Icons.tune_rounded;
+      case 'delivery':
+      case 'delivery_fee':
+      default:
+        return Icons.two_wheeler_rounded;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool credit = entry.isCredit;
+    final Color amountColor =
+        credit ? ZeetColors.success : ZeetColors.danger;
+    final String prefix = credit ? '+' : '';
+    final String label = entry.description?.trim().isNotEmpty == true
+        ? entry.description!
+        : entry.typeLabel;
+    final String dateLabel = _formatDate(entry.createdAt);
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: borderColor, width: 0.5)),
+      ),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 36.w,
+            height: 36.w,
+            decoration: BoxDecoration(
+              color: ZeetColors.surfaceAlt,
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Icon(_iconForType(), size: 18.sp, color: textLightColor),
+          ),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (dateLabel.isNotEmpty) ...<Widget>[
+                  SizedBox(height: 2.h),
+                  Text(
+                    dateLabel,
+                    style: TextStyle(color: textLightColor, fontSize: 11.sp),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          SizedBox(width: 8.w),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                prefix,
+                style: TextStyle(
+                  color: amountColor,
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              ZeetMoney(
+                amount: entry.amount.abs(),
+                currency: ZeetCurrency.fcfa,
+                style: TextStyle(
+                  color: amountColor,
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w800,
+                  fontFeatures: const <FontFeature>[
+                    FontFeature.tabularFigures(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }

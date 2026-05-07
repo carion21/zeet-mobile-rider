@@ -8,7 +8,6 @@
 // Design aligné zeet_ui + POS ergonomics + 3-clics rule.
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
@@ -139,7 +138,7 @@ class _CompletedDeliveriesTabState
           return _HistoryTile(
             item: item,
             onTap: () {
-              HapticFeedback.lightImpact();
+              ZeetHaptics.success();
               Routes.pushMissionDetails(missionId: item.id.toString());
             },
           );

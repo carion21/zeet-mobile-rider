@@ -1,76 +1,125 @@
 // lib/models/mission_log_model.dart
 //
-// Modele pour l'endpoint GET /v1/rider/missions/:id/logs (audit trail
-// d'une mission : transitions de statut, acteurs, horodatage).
+// Modele pour l'endpoint GET /v1/rider/missions/:id/logs.
 //
-// Parsing tres defensif : le backend peut exposer le champ sous differents
-// noms selon les versions (`event`, `action`, `status`, `type`).
+// Payload reel (zeet-core-system) :
+//   {
+//     "id": 3329,
+//     "date_created": "...",
+//     "observation": "Rider accepted mission",   // texte libre (EN)
+//     "actor": 4,                                 // user.id (nullable)
+//     "actor_type": "system" | "user" | "runner",
+//     "source": "dispatch_engine" | null,
+//     "metadata": { ... } | null,
+//     "delivery_status": {                        // null sur evenements
+//       "id": 3, "label": "Accepté",              // hors transition (ex.
+//       "value": "accepted",                      // dispatch scoring)
+//       "color": "#1E90FF"
+//     } | null
+//   }
+
+import 'package:flutter/material.dart';
 
 class MissionLogEntry {
   final int? id;
-  final String? event;
-  final String? description;
-  final String? actor;
-  final String? fromStatus;
-  final String? toStatus;
+  final String? observation;
+  final int? actorId;
+  final String? actorType;
+  final String? source;
   final DateTime? createdAt;
   final Map<String, dynamic>? metadata;
+  final MissionLogStatus? deliveryStatus;
 
   const MissionLogEntry({
     this.id,
-    this.event,
-    this.description,
-    this.actor,
-    this.fromStatus,
-    this.toStatus,
+    this.observation,
+    this.actorId,
+    this.actorType,
+    this.source,
     this.createdAt,
     this.metadata,
+    this.deliveryStatus,
   });
 
-  /// Titre affichable dans la timeline.
+  /// Titre principal de la timeline. Priorite au libelle de transition
+  /// de statut (lisible FR), fallback observation backend, sinon generique.
   String get displayTitle {
-    if (description != null && description!.isNotEmpty) return description!;
-    if (event != null && event!.isNotEmpty) return event!;
-    if (toStatus != null && toStatus!.isNotEmpty) {
-      return 'Statut : $toStatus';
-    }
+    final label = deliveryStatus?.label;
+    if (label != null && label.isNotEmpty) return label;
+    final obs = observation;
+    if (obs != null && obs.isNotEmpty) return obs;
     return 'Événement';
   }
 
-  /// Sous-titre (acteur + transition) si disponible.
+  /// Sous-titre : observation si elle n'a pas servi de titre, sinon
+  /// origine de l'evenement (acteur / source).
   String? get displaySubtitle {
+    final obs = observation;
+    final hasStatusTitle = deliveryStatus?.label != null;
+    if (hasStatusTitle && obs != null && obs.isNotEmpty) return obs;
+
     final parts = <String>[];
-    if (actor != null && actor!.isNotEmpty) parts.add(actor!);
-    if (fromStatus != null && toStatus != null) {
-      parts.add('$fromStatus → $toStatus');
+    final actor = _actorLabel();
+    if (actor != null) parts.add(actor);
+    final src = source;
+    if (src != null && src.isNotEmpty) {
+      parts.add(src.replaceAll('_', ' '));
     }
     return parts.isEmpty ? null : parts.join(' · ');
   }
 
+  /// Couleur du dot timeline. Couleur API du statut quand dispo, sinon
+  /// neutre (le tile applique le fallback `scheme.primary`).
+  Color? get dotColor => deliveryStatus?.color;
+
+  String? _actorLabel() {
+    final type = actorType;
+    if (type == null) return null;
+    switch (type) {
+      case 'system':
+        return 'Système';
+      case 'runner':
+        return 'Dispatch';
+      case 'user':
+        return actorId != null ? 'Utilisateur #$actorId' : 'Utilisateur';
+      default:
+        return type;
+    }
+  }
+
   factory MissionLogEntry.fromJson(Map<String, dynamic> json) {
+    final rawStatus = json['delivery_status'];
     return MissionLogEntry(
       id: (json['id'] as num?)?.toInt(),
-      event: (json['event'] ??
-              json['action'] ??
-              json['type'] ??
-              json['name']) as String?,
-      description: (json['description'] ??
-              json['message'] ??
-              json['label']) as String?,
-      actor: (json['actor'] ??
-              json['author'] ??
-              json['by'] ??
-              json['source']) as String?,
-      fromStatus: (json['from_status'] ?? json['previous_status']) as String?,
-      toStatus:
-          (json['to_status'] ?? json['new_status'] ?? json['status']) as String?,
-      createdAt: _parseDate(json['date_created'] ??
-          json['created_at'] ??
-          json['occurred_at'] ??
-          json['timestamp']),
+      observation: json['observation'] as String?,
+      actorId: (json['actor'] as num?)?.toInt(),
+      actorType: json['actor_type'] as String?,
+      source: json['source'] as String?,
+      createdAt: _parseDate(json['date_created']),
       metadata: json['metadata'] is Map<String, dynamic>
           ? Map<String, dynamic>.from(json['metadata'] as Map)
           : null,
+      deliveryStatus: rawStatus is Map<String, dynamic>
+          ? MissionLogStatus.fromJson(rawStatus)
+          : null,
+    );
+  }
+}
+
+class MissionLogStatus {
+  final int? id;
+  final String? label;
+  final String? value;
+  final Color? color;
+
+  const MissionLogStatus({this.id, this.label, this.value, this.color});
+
+  factory MissionLogStatus.fromJson(Map<String, dynamic> json) {
+    return MissionLogStatus(
+      id: (json['id'] as num?)?.toInt(),
+      label: json['label'] as String?,
+      value: json['value'] as String?,
+      color: _parseHexColor(json['color'] as String?),
     );
   }
 }
@@ -80,4 +129,13 @@ DateTime? _parseDate(dynamic v) {
   if (v is DateTime) return v;
   if (v is String) return DateTime.tryParse(v);
   return null;
+}
+
+Color? _parseHexColor(String? hex) {
+  if (hex == null || hex.isEmpty) return null;
+  var clean = hex.replaceFirst('#', '').trim();
+  if (clean.length == 6) clean = 'FF$clean';
+  if (clean.length != 8) return null;
+  final value = int.tryParse(clean, radix: 16);
+  return value == null ? null : Color(value);
 }

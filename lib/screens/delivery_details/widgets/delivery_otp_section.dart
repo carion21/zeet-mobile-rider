@@ -19,6 +19,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/screens/delivery_details/widgets/reason_picker_sheet.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 
 class DeliveryOtpDialogs {
   /// Demande un code OTP.
@@ -232,7 +233,7 @@ class _OtpBottomSheetState extends State<_OtpBottomSheet> {
       }
       _busy = false;
     });
-    HapticFeedback.heavyImpact();
+    ZeetHaptics.heavy();
     _resetCases();
   }
 

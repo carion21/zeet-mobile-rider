@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:rider/models/delivery_history_model.dart';
 import 'package:rider/services/api_client.dart';
+import 'package:rider/services/cache_policies.dart';
 import 'package:rider/services/delivery_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -66,13 +67,25 @@ class DeliveryHistoryState {
 // ---------------------------------------------------------------------------
 class DeliveryHistoryNotifier extends StateNotifier<DeliveryHistoryState> {
   final DeliveryService _service;
+  DateTime? _lastFetchedAt;
+  DeliveryHistoryFilter? _lastFetchedFilter;
 
   DeliveryHistoryNotifier(this._service) : super(const DeliveryHistoryState());
 
   static const int _pageSize = 25;
 
   /// Charge la premiere page selon le filtre courant.
-  Future<void> load() async {
+  /// [force] : si `true`, ignore le TTL [CachePolicy.deliveriesHistory] (5 min).
+  Future<void> load({bool force = false}) async {
+    // Court-circuit cache : meme filtre, page 1 fraiche → no-op.
+    if (!force &&
+        _lastFetchedAt != null &&
+        _lastFetchedFilter == state.filter &&
+        CachePolicies.fresh(CachePolicy.deliveriesHistory, _lastFetchedAt!) &&
+        state.items.isNotEmpty) {
+      return;
+    }
+
     state = state.copyWith(isLoading: true, clearError: true);
     try {
       final result = await _service.listDeliveries(
@@ -85,12 +98,18 @@ class DeliveryHistoryNotifier extends StateNotifier<DeliveryHistoryState> {
         meta: result.meta,
         isLoading: false,
       );
+      _lastFetchedAt = DateTime.now();
+      _lastFetchedFilter = state.filter;
     } on ApiException catch (e) {
+      _lastFetchedAt = null;
+      _lastFetchedFilter = null;
       state = state.copyWith(
         isLoading: false,
         errorMessage: e.message,
       );
     } catch (e) {
+      _lastFetchedAt = null;
+      _lastFetchedFilter = null;
       debugPrint('[DeliveryHistory] load error: $e');
       state = state.copyWith(
         isLoading: false,
@@ -141,8 +160,8 @@ class DeliveryHistoryNotifier extends StateNotifier<DeliveryHistoryState> {
     await load();
   }
 
-  /// Pull-to-refresh.
-  Future<void> refresh() => load();
+  /// Pull-to-refresh (force, bypass cache TTL).
+  Future<void> refresh() => load(force: true);
 }
 
 // ---------------------------------------------------------------------------

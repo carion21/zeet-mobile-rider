@@ -102,6 +102,53 @@ class IncomingDeliveryPayload {
     return diff < 0 ? 0 : diff;
   }
 
+  /// Titre formaté lock-screen friendly (plan §3.4).
+  /// Format : "Mission · X FCFA" — info la plus utile en 1 coup d'œil.
+  /// Fallback sur [title] backend si fee absent.
+  String get lockScreenTitle {
+    if (deliveryFeeFcfa <= 0) return title;
+    final formatted = _formatFcfa(deliveryFeeFcfa);
+    return 'Mission · $formatted FCFA';
+  }
+
+  /// Corps formaté lock-screen friendly (plan §3.4).
+  /// Format : "X,Y km · pickup → dropoff" — distance + raccourci adresses.
+  /// Fallback sur [body] backend si data absent.
+  String get lockScreenBody {
+    if (distanceKm <= 0) return body;
+    final dist = distanceKm.toStringAsFixed(1).replaceAll('.', ',');
+    final pickup = _shortAddress(pickupAddress);
+    final dropoff = _shortAddress(dropoffAddress);
+    if (pickup.isEmpty && dropoff.isEmpty) {
+      return '$dist km';
+    }
+    if (pickup.isEmpty) return '$dist km · → $dropoff';
+    if (dropoff.isEmpty) return '$dist km · $pickup';
+    return '$dist km · $pickup → $dropoff';
+  }
+
+  /// Formate un entier FCFA en "X XXX" avec espace fine insécable.
+  static String _formatFcfa(int amount) {
+    final str = amount.abs().toString();
+    final buf = StringBuffer();
+    final len = str.length;
+    for (int i = 0; i < len; i++) {
+      if (i > 0 && (len - i) % 3 == 0) buf.write(' ');
+      buf.write(str[i]);
+    }
+    return buf.toString();
+  }
+
+  /// Réduit une adresse complète à son segment le plus parlant pour le
+  /// lock screen (premier segment avant la première virgule), capé à 24
+  /// caractères.
+  static String _shortAddress(String full) {
+    if (full.isEmpty) return '';
+    final firstPart = full.split(',').first.trim();
+    if (firstPart.length <= 24) return firstPart;
+    return '${firstPart.substring(0, 22).trimRight()}…';
+  }
+
   /// Parse un payload FCM brut (map reconstruite depuis RemoteMessage.data).
   static IncomingDeliveryPayload? tryParse(Map<String, dynamic> raw) {
     final metadata = _extractMetadata(raw);

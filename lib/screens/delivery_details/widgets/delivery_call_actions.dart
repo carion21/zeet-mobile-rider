@@ -7,7 +7,6 @@
 // Le numero est sanitize et lance via `launchPhoneCall`.
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:rider/core/utils/phone_launcher.dart';
@@ -35,7 +34,7 @@ class DeliveryCallButton extends StatelessWidget {
 
     return IconButton(
       onPressed: () async {
-        HapticFeedback.selectionClick();
+        ZeetHaptics.tap();
         await launchPhoneCall(phoneNumber!, context: context);
       },
       tooltip: tooltip,

@@ -81,6 +81,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     // online → offline (peak moment fin de journee).
     final bool wasOnline = ref.read(isOnlineProvider);
 
+    // Confirmation explicite : passer offline coupe les missions, passer
+    // online les reprend. On evite tout toggle accidentel.
+    final confirmed = await AppPopup.showConfirmation(
+      context: context,
+      title: wasOnline ? 'Passer hors-ligne ?' : 'Repasser en ligne ?',
+      message: wasOnline
+          ? 'Tu vas passer hors-ligne — tu ne recevras plus de missions. Continuer ?'
+          : 'Te remettre en ligne pour recevoir des missions ?',
+      confirmLabel: 'Confirmer',
+      cancelLabel: 'Annuler',
+      isDestructive: wasOnline,
+    );
+    if (confirmed != true) return;
+    if (!mounted) return;
+
     final result = await ref.read(statusProvider.notifier).toggleOnline();
     if (!mounted) return;
 
@@ -255,7 +270,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (!mounted) return;
       AppToast.showSuccess(
         context: context,
-        message: 'Deconnexion reussie',
+        message: 'Déconnexion réussie',
       );
       Routes.navigateAndRemoveAll(Routes.login);
     }
@@ -277,11 +292,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final textLightColor =
         isDarkMode ? AppColors.darkTextLight : AppColors.textLight;
     final backgroundColor =
-        isDarkMode ? AppColors.darkBackground : const Color(0xFFF8F8F8);
+        isDarkMode ? AppColors.darkBackground : ZeetColors.surfaceAlt;
     final surfaceColor = isDarkMode ? AppColors.darkSurface : Colors.white;
     final borderColor = isDarkMode
         ? AppColors.darkTextLight.withValues(alpha: 0.2)
-        : const Color(0xFFEEEEEE);
+        : ZeetColors.line;
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -532,10 +547,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
             ],
           ),
-          Switch(
-            value: isOnline,
-            onChanged: isLoading ? null : (_) => _toggleOnlineStatus(),
-            activeThumbColor: Colors.green,
+          Semantics(
+            label: 'Statut en ligne, ${isOnline ? 'actif' : 'inactif'}',
+            toggled: isOnline,
+            child: Switch(
+              value: isOnline,
+              onChanged: isLoading ? null : (_) => _toggleOnlineStatus(),
+              activeThumbColor: Colors.green,
+            ),
           ),
         ],
       ),
@@ -560,7 +579,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           label: 'Prenom',
           controller: _controller.firstnameController,
           focusNode: _controller.firstnameFocusNode,
-          hintText: 'Votre prenom',
+          hintText: 'Ton prénom',
           prefixIcon: 'person',
           validator: _controller.validateRequired,
           textColor: textColor,
@@ -573,7 +592,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           label: 'Nom',
           controller: _controller.lastnameController,
           focusNode: _controller.lastnameFocusNode,
-          hintText: 'Votre nom',
+          hintText: 'Ton nom',
           prefixIcon: 'person',
           validator: _controller.validateRequired,
           textColor: textColor,
@@ -596,7 +615,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           borderColor: borderColor,
           hasInlineError: editState.emailAlreadyUsed,
           inlineErrorMessage:
-              editState.emailAlreadyUsed ? 'Cet email est deja utilise' : null,
+              editState.emailAlreadyUsed ? 'Cet email est déjà utilisé' : null,
         ),
         SizedBox(height: 12.h),
         _buildGenderSelector(

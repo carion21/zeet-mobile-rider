@@ -13,7 +13,6 @@
 // écrans qui affichent déjà la liste (deliveries, deliveries_history).
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:rider/models/mission_model.dart';
@@ -39,7 +38,7 @@ class ActiveMissionsFabOverlay extends ConsumerWidget {
       child: _PulsingFab(
         count: count,
         onTap: () {
-          HapticFeedback.selectionClick();
+          ZeetHaptics.tap();
           Routes.pushMissionDetails(missionId: first.id.toString());
         },
       ),
@@ -65,12 +64,14 @@ class _PulsingFabState extends State<_PulsingFab>
   @override
   void initState() {
     super.initState();
+    // 1500ms hors échelle ZeetMotion : pulse breathing du FAB Zeigarnik (cycle long
+     // intentionnel pour ne pas distraire). Cap rider 200ms ne s'applique pas aux pulses ambient.
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
     _scale = Tween<double>(begin: 1.0, end: 1.10).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+      CurvedAnimation(parent: _controller, curve: ZeetCurves.standard),
     );
   }
 

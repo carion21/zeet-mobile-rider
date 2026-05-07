@@ -10,7 +10,6 @@
 // zeet-micro-copy (rider efficace), zeet-states-elae (4 etats ELOE).
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
@@ -61,7 +60,7 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
   }
 
   Future<void> _refreshAll() async {
-    HapticFeedback.lightImpact();
+    ZeetHaptics.success();
     await ref.read(ratingsProvider.notifier).refresh();
     _freshKey.currentState?.bump();
   }
@@ -74,7 +73,7 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
     final textLightColor =
         isDarkMode ? AppColors.darkTextLight : AppColors.textLight;
     final backgroundColor =
-        isDarkMode ? AppColors.darkBackground : const Color(0xFFF8F8F8);
+        isDarkMode ? AppColors.darkBackground : ZeetColors.surfaceAlt;
     final surfaceColor = isDarkMode ? AppColors.darkSurface : Colors.white;
 
     return Scaffold(
@@ -324,7 +323,7 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
     final orderCode = entry.order?.code;
 
     return Container(
-      padding: EdgeInsets.all(14.w),
+      padding: EdgeInsets.all(16.w),
       decoration: BoxDecoration(
         color: surfaceColor,
         borderRadius: BorderRadius.circular(14.r),
@@ -361,7 +360,7 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
                         orderCode,
                         style: TextStyle(
                           color: textLightColor,
-                          fontSize: 11.sp,
+                          fontSize: 12.sp,
                           fontFeatures: const [
                             FontFeature.tabularFigures(),
                           ],
@@ -374,7 +373,7 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
               if (dateStr.isNotEmpty)
                 Text(
                   dateStr,
-                  style: TextStyle(color: textLightColor, fontSize: 11.sp),
+                  style: TextStyle(color: textLightColor, fontSize: 12.sp),
                 ),
             ],
           ),
@@ -382,7 +381,7 @@ class _RatingsScreenState extends ConsumerState<RatingsScreen> {
           _buildStarsRow(
             entry.score.toDouble(),
             size: 16,
-            color: const Color(0xFFFFC107),
+            color: ZeetColors.starGold,
           ),
           if (entry.comment != null && entry.comment!.trim().isNotEmpty) ...[
             SizedBox(height: 10.h),

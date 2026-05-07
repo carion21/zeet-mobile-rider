@@ -21,10 +21,11 @@
 //   - `zeet-motion-system` §4 (fade through inter-tab)
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:rider/providers/connectivity_provider.dart';
 import 'package:rider/providers/main_tab_provider.dart';
 import 'package:rider/providers/mission_provider.dart';
+import 'package:rider/providers/status_provider.dart';
 import 'package:rider/screens/deliveries/index.dart';
 import 'package:rider/screens/home/index.dart';
 import 'package:rider/screens/profile/index.dart';
@@ -64,7 +65,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
   void _onTabTap(int index) {
     final int current = ref.read(mainTabIndexProvider);
     if (current == index) return;
-    HapticFeedback.selectionClick();
+    ZeetHaptics.tap();
     ref.read(mainTabIndexProvider.notifier).setIndex(index);
   }
 
@@ -80,19 +81,34 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
     final Color barBackground =
         isDarkMode ? ZeetColors.surfaceDark : ZeetColors.surface;
 
+    // Banner global offline : affiche un bandeau rouge top quand le réseau
+    // est coupé. Skill `zeet-offline-first` §7. ConnectivityBanner occupe
+    // 0 pixel quand isOnline = true (SizedBox.shrink), donc aucun coût UX.
+    final bool isOnline = ref.watch(isNetworkOnlineProvider);
+
+    final bool isRiderOnline = ref.watch(isOnlineProvider);
+
     return Scaffold(
       // IndexedStack : tous les screens sont mountes une fois et leur
       // etat (scroll, FCM listeners, controllers) est preserve entre les
       // switches. Pas de transition inter-tab pour eviter de detruire
       // l'arbre — l'instantane est instantane (>= 200ms imperceptible
       // sur un IndexedStack), conforme aux apps natives Material.
-      body: IndexedStack(
-        index: currentIndex,
-        children: _screens,
+      body: Column(
+        children: <Widget>[
+          ConnectivityBanner(isOnline: isOnline),
+          Expanded(
+            child: IndexedStack(
+              index: currentIndex,
+              children: _screens,
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: _BottomNavBar(
         currentIndex: currentIndex,
         ongoingCount: ongoingCount,
+        isRiderOnline: isRiderOnline,
         selectedColor: selectedColor,
         unselectedColor: unselectedColor,
         backgroundColor: barBackground,
@@ -106,6 +122,7 @@ class _BottomNavBar extends StatelessWidget {
   const _BottomNavBar({
     required this.currentIndex,
     required this.ongoingCount,
+    required this.isRiderOnline,
     required this.selectedColor,
     required this.unselectedColor,
     required this.backgroundColor,
@@ -114,6 +131,11 @@ class _BottomNavBar extends StatelessWidget {
 
   final int currentIndex;
   final int ongoingCount;
+
+  /// Etat online du rider — affiche un dot vert sur l'onglet Accueil
+  /// pour rappeler le statut shift en permanence (skill
+  /// `zeet-neuro-ux` status visibility, sans coût visuel).
+  final bool isRiderOnline;
   final Color selectedColor;
   final Color unselectedColor;
   final Color backgroundColor;
@@ -142,11 +164,12 @@ class _BottomNavBar extends StatelessWidget {
                 selected: currentIndex == 0,
                 selectedColor: selectedColor,
                 unselectedColor: unselectedColor,
+                showOnlineDot: isRiderOnline,
                 onTap: () => onTap(0),
               ),
               _NavItem(
-                icon: Icons.delivery_dining_rounded,
-                label: 'Livraisons',
+                icon: Icons.two_wheeler_rounded,
+                label: 'Courses',
                 selected: currentIndex == 1,
                 selectedColor: selectedColor,
                 unselectedColor: unselectedColor,
@@ -154,16 +177,16 @@ class _BottomNavBar extends StatelessWidget {
                 onTap: () => onTap(1),
               ),
               _NavItem(
-                icon: Icons.bar_chart_rounded,
-                label: 'Stats',
+                icon: Icons.payments_rounded,
+                label: 'Gains',
                 selected: currentIndex == 2,
                 selectedColor: selectedColor,
                 unselectedColor: unselectedColor,
                 onTap: () => onTap(2),
               ),
               _NavItem(
-                icon: Icons.person_rounded,
-                label: 'Profil',
+                icon: Icons.account_circle_rounded,
+                label: 'Compte',
                 selected: currentIndex == 3,
                 selectedColor: selectedColor,
                 unselectedColor: unselectedColor,
@@ -186,6 +209,7 @@ class _NavItem extends StatelessWidget {
     required this.unselectedColor,
     required this.onTap,
     this.badgeCount = 0,
+    this.showOnlineDot = false,
   });
 
   final IconData icon;
@@ -196,6 +220,10 @@ class _NavItem extends StatelessWidget {
   final VoidCallback onTap;
   final int badgeCount;
 
+  /// Affiche un dot vert "online" sur l'icone (Accueil) — rappel
+  /// permanent du statut shift sans occuper de pixel quand offline.
+  final bool showOnlineDot;
+
   @override
   Widget build(BuildContext context) {
     final Color color = selected ? selectedColor : unselectedColor;
@@ -204,7 +232,7 @@ class _NavItem extends StatelessWidget {
       child: Semantics(
         button: true,
         selected: selected,
-        label: label,
+        label: showOnlineDot ? '$label, en ligne' : label,
         child: InkWell(
           onTap: onTap,
           // Hit target plein rectangle (>= 48pt en hauteur car parent = 64).
@@ -217,6 +245,7 @@ class _NavItem extends StatelessWidget {
                   icon: icon,
                   color: color,
                   badgeCount: badgeCount,
+                  showOnlineDot: showOnlineDot,
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -241,45 +270,64 @@ class _IconWithBadge extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.badgeCount,
+    this.showOnlineDot = false,
   });
 
   final IconData icon;
   final Color color;
   final int badgeCount;
+  final bool showOnlineDot;
 
   @override
   Widget build(BuildContext context) {
-    if (badgeCount <= 0) {
+    final bool hasBadge = badgeCount > 0;
+    final bool hasDot = showOnlineDot;
+    if (!hasBadge && !hasDot) {
       return Icon(icon, color: color, size: 24);
     }
-    final String label = badgeCount > 9 ? '9+' : '$badgeCount';
+    final String badgeLabel = badgeCount > 9 ? '9+' : '$badgeCount';
     return Stack(
       clipBehavior: Clip.none,
       children: <Widget>[
         Icon(icon, color: color, size: 24),
-        Positioned(
-          right: -8,
-          top: -4,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(
-              color: ZeetColors.danger,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-            child: Center(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  height: 1.1,
+        if (hasBadge)
+          Positioned(
+            right: -8,
+            top: -4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: ZeetColors.danger,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              child: Center(
+                child: Text(
+                  badgeLabel,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    height: 1.1,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
+        if (hasDot && !hasBadge)
+          Positioned(
+            right: -2,
+            top: -2,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: ZeetColors.success,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+            ),
+          ),
       ],
     );
   }

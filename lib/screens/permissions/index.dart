@@ -5,7 +5,6 @@
 // Refresh a resumed (retour des settings Android).
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/core/constants/colors.dart';
@@ -73,7 +72,7 @@ class _PermissionsScreenState extends ConsumerState<PermissionsScreen>
   }
 
   Future<void> _requestOne(ZeetPermission p) async {
-    await HapticFeedback.selectionClick();
+    await ZeetHaptics.tap();
     setState(() => _requestingAny = true);
     try {
       if (_statuses[p] == ZeetPermissionStatus.permanentlyDenied) {
@@ -83,7 +82,7 @@ class _PermissionsScreenState extends ConsumerState<PermissionsScreen>
         if (!mounted) return;
         setState(() => _statuses[p] = next);
         if (next == ZeetPermissionStatus.granted) {
-          await HapticFeedback.lightImpact();
+          await ZeetHaptics.success();
         }
       }
     } finally {
@@ -142,11 +141,11 @@ class _PermissionsScreenState extends ConsumerState<PermissionsScreen>
     } else {
       AppToast.showSuccess(
         context: context,
-        message: 'Pret a rouler ! Bonne tournee.',
+        message: 'Prêt à rouler ! Bonne tournée.',
       );
     }
 
-    Routes.navigateAndRemoveAll(Routes.home);
+    Routes.navigateAndRemoveAll(Routes.mainScaffold);
   }
 
   @override
@@ -166,7 +165,7 @@ class _PermissionsScreenState extends ConsumerState<PermissionsScreen>
           children: <Widget>[
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const ZeetSkeletonList(itemCount: 5, itemHeight: 88)
                   : RefreshIndicator(
                       onRefresh: _refreshAll,
                       child: ListView(
@@ -386,7 +385,7 @@ class _PermissionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 150),
+                  duration: ZeetMotion.xs,
                   child: granted
                       ? Container(
                           key: const ValueKey<String>('granted'),
@@ -498,7 +497,7 @@ class _CriticalPill extends StatelessWidget {
       child: Text(
         'Requis',
         style: TextStyle(
-          fontSize: 10.sp,
+          fontSize: 12.sp,
           fontWeight: FontWeight.w700,
           color: AppColors.primary,
           letterSpacing: 0.3,
@@ -532,14 +531,14 @@ class _StatusPill extends StatelessWidget {
         label = 'Appuyez pour autoriser';
         icon = Icons.touch_app_rounded;
       case ZeetPermissionStatus.permanentlyDenied:
-        bg = const Color(0xFFFFE6E6);
-        fg = const Color(0xFFD32F2F);
-        label = 'Ouvrir les reglages';
+        bg = ZeetColors.dangerBg;
+        fg = ZeetColors.danger;
+        label = 'Ouvrir les réglages';
         icon = Icons.settings_rounded;
       case ZeetPermissionStatus.notApplicable:
-        bg = const Color(0xFFEEEEEE);
-        fg = const Color(0xFF616161);
-        label = 'Non necessaire';
+        bg = ZeetColors.line;
+        fg = ZeetColors.inkMuted;
+        label = 'Non nécessaire';
         icon = Icons.remove_circle_outline_rounded;
     }
 
@@ -557,7 +556,7 @@ class _StatusPill extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: 11.sp,
+              fontSize: 12.sp,
               fontWeight: FontWeight.w700,
               color: fg,
             ),

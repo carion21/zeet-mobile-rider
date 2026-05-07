@@ -8,7 +8,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:zeet_ui/zeet_ui.dart';
 
@@ -54,7 +53,7 @@ class _SlideToAcceptButtonState extends State<SlideToAcceptButton>
     super.initState();
     _resetController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 220),
+      duration: ZeetMotion.sm,
     )..addListener(() {
         setState(() {
           _dragX = _dragX * (1 - _resetController.value);
@@ -81,10 +80,10 @@ class _SlideToAcceptButtonState extends State<SlideToAcceptButton>
     if (_dragX / _maxDrag >= _completionThreshold) {
       _completed = true;
       setState(() => _dragX = _maxDrag);
-      HapticFeedback.heavyImpact();
+      ZeetHaptics.heavy();
       widget.onCompleted();
     } else {
-      HapticFeedback.selectionClick();
+      ZeetHaptics.tap();
       _resetController.forward(from: 0);
     }
   }

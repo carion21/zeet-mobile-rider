@@ -78,7 +78,11 @@ class DeliveryNavInfoBar extends StatelessWidget {
                 _Divider(color: textLightColor),
                 _NavInfoItem(
                   iconName: 'clock',
-                  value: estimatedArrival,
+                  // Prefixe "à" pour lever l'ambiguite duree vs heure
+                  // d'arrivee (skill `zeet-tone-of-voice-fr` clarte oral).
+                  value: estimatedArrival == '--:--'
+                      ? '--:--'
+                      : 'à $estimatedArrival',
                   label: 'Arrivée',
                   color: AppColors.primary,
                   textColor: textColor,
@@ -101,7 +105,7 @@ class DeliveryNavInfoBar extends StatelessWidget {
                 child: Center(
                   child: AnimatedRotation(
                     turns: isExpanded ? 0.5 : 0.0,
-                    duration: const Duration(milliseconds: 300),
+                    duration: ZeetMotion.md,
                     child: Icon(
                       Icons.keyboard_arrow_up,
                       color: AppColors.primary,

@@ -4,6 +4,7 @@ import 'package:rider/core/constants/api.dart';
 import 'package:rider/models/rider_model.dart';
 import 'package:rider/services/api_client.dart';
 import 'package:rider/services/device_token_manager.dart';
+import 'package:rider/services/mission_action_idempotency_cache.dart';
 import 'package:rider/services/token_service.dart';
 
 /// Service d'authentification.
@@ -165,6 +166,15 @@ class AuthService {
 
     // Toujours nettoyer les tokens locaux
     await _tokenService.clearTokens();
+
+    // Purger les UUID d'idempotency : evite qu'un autre rider qui se
+    // connecte ensuite sur le meme device (zone partagee) ne reutilise
+    // les cles UUID en attente du rider precedent.
+    try {
+      await MissionActionIdempotencyCache.instance.clearAll();
+    } catch (_) {
+      // Best-effort : on ne bloque pas la deconnexion locale.
+    }
   }
 
   // ---------------------------------------------------------------------------

@@ -3,6 +3,27 @@ import 'package:flutter/foundation.dart';
 
 /// Logger HTTP uniquement actif en mode debug (stripped en release).
 class ApiLogger {
+  /// Headers consideres sensibles : leur valeur est redactee dans les logs.
+  /// Comparaison case-insensitive.
+  static const Set<String> _redactedHeaderKeys = {
+    'authorization',
+    'cookie',
+    'x-api-key',
+  };
+
+  /// Retourne une copie des headers avec les valeurs sensibles masquees.
+  static Map<String, String> _redactHeaders(Map<String, String> headers) {
+    final redacted = <String, String>{};
+    headers.forEach((key, value) {
+      if (_redactedHeaderKeys.contains(key.toLowerCase())) {
+        redacted[key] = '***redacted***';
+      } else {
+        redacted[key] = value;
+      }
+    });
+    return redacted;
+  }
+
   static void _log(String message) {
     if (!kDebugMode) return;
     for (final line in message.split('\n')) {
@@ -35,7 +56,8 @@ class ApiLogger {
 
     if (headers != null && headers.isNotEmpty) {
       buffer.writeln('-- Headers :');
-      for (final entry in headers.entries) {
+      final safe = _redactHeaders(headers);
+      for (final entry in safe.entries) {
         buffer.writeln('--   ${entry.key}: ${entry.value}');
       }
     }

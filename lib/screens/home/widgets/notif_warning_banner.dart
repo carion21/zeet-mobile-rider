@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/services/permissions_service.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 
 class HomeNotifWarningBanner extends StatefulWidget {
   const HomeNotifWarningBanner({super.key});
@@ -90,7 +91,7 @@ class _HomeNotifWarningBannerState extends State<HomeNotifWarningBanner>
     return Padding(
       padding: EdgeInsets.fromLTRB(16.w, 4.h, 16.w, 8.h),
       child: Material(
-        color: const Color(0xFFFFF3E0), // orange pale, warning discret
+        color: ZeetColors.warningBg,
         borderRadius: BorderRadius.circular(12.r),
         child: InkWell(
           onTap: _openSettings,
@@ -115,15 +116,15 @@ class _HomeNotifWarningBannerState extends State<HomeNotifWarningBanner>
                         style: TextStyle(
                           fontSize: 13.sp,
                           fontWeight: FontWeight.w700,
-                          color: const Color(0xFF7A3E00),
+                          color: ZeetColors.warningText,
                         ),
                       ),
                       SizedBox(height: 2.h),
                       Text(
                         'Active les notifications dans les Réglages.',
                         style: TextStyle(
-                          fontSize: 11.sp,
-                          color: const Color(0xFF7A3E00),
+                          fontSize: 12.sp,
+                          color: ZeetColors.warningText,
                         ),
                       ),
                     ],
@@ -134,7 +135,7 @@ class _HomeNotifWarningBannerState extends State<HomeNotifWarningBanner>
                   icon: Icon(
                     Icons.close_rounded,
                     size: 18.sp,
-                    color: const Color(0xFF7A3E00),
+                    color: ZeetColors.warningText,
                   ),
                   onPressed: _dismiss,
                   padding: EdgeInsets.zero,

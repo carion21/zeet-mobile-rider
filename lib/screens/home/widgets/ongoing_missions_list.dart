@@ -7,13 +7,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:rider/core/constants/colors.dart';
-import 'package:rider/core/constants/icons.dart';
 import 'package:rider/core/constants/sizes.dart';
+import 'package:rider/models/mission_model.dart';
 import 'package:rider/providers/connectivity_provider.dart';
 import 'package:rider/providers/main_tab_provider.dart';
 import 'package:rider/providers/mission_provider.dart';
 import 'package:rider/providers/status_provider.dart';
 import 'package:rider/screens/home/widgets/mission_card.dart';
+import 'package:rider/services/navigation_service.dart';
 import 'package:zeet_ui/zeet_ui.dart';
 
 class OngoingMissionsList extends ConsumerWidget {
@@ -67,13 +68,16 @@ class OngoingMissionsList extends ConsumerWidget {
         if (missionsState.isLoading && ongoing.isEmpty)
           _LoadingState(surfaceColor: surfaceColor, isDarkMode: isDarkMode)
         else if (missionsState.errorMessage != null && ongoing.isEmpty)
-          _ErrorState(
-            message: missionsState.errorMessage!,
-            textColor: textColor,
-            surfaceColor: surfaceColor,
-            isDarkMode: isDarkMode,
-            onRetry: () =>
-                ref.read(missionsListProvider.notifier).refresh(),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSizes().paddingLarge),
+            // Composant DS partagé : copy ZEET, retry intégré, semantics OK.
+            child: ZeetErrorState(
+              kind: ZeetErrorKind.generic,
+              description: missionsState.errorMessage,
+              onRetry: () =>
+                  ref.read(missionsListProvider.notifier).refresh(),
+              compact: true,
+            ),
           )
         else if (ongoing.isEmpty)
           _EmptyState(
@@ -93,11 +97,68 @@ class OngoingMissionsList extends ConsumerWidget {
             child: Column(
               children: ongoing
                   .take(2)
-                  .map((mission) => MissionCard(mission: mission))
+                  .map((mission) => _SwipeReportCard(mission: mission))
                   .toList(),
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Wrapper Dismissible swipe-left "Signaler un souci" sur une MissionCard
+/// ongoing. Skill `zeet-gesture-grammar` §3 (rider : swipe sur mission en
+/// cours = action contextuelle) + `zeet-3-clicks-rule` §5bis (swipe = 0.5
+/// tap, raccourci vers signaler). Le swipe ne dismisse PAS la card : il
+/// pousse l'écran de détail où le rider peut taper "Signaler un souci".
+class _SwipeReportCard extends StatelessWidget {
+  const _SwipeReportCard({required this.mission});
+
+  final Mission mission;
+
+  @override
+  Widget build(BuildContext context) {
+    // MissionCard porte déjà son propre `margin: bottom: 16`.
+    return Dismissible(
+      key: ValueKey<String>('ongoing-mission-${mission.id}'),
+      direction: DismissDirection.endToStart,
+      background: const SizedBox.shrink(),
+      secondaryBackground: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: ZeetSpacing.x6),
+        decoration: BoxDecoration(
+          color: ZeetColors.danger,
+          borderRadius: ZeetRadius.brMd,
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.flag_outlined, color: Colors.white, size: 22),
+            SizedBox(width: ZeetSpacing.x2),
+            Text(
+              'Signaler',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+      // Seuil élevé pour éviter les déclenchements accidentels (gants).
+      dismissThresholds: const <DismissDirection, double>{
+        DismissDirection.endToStart: 0.45,
+      },
+      confirmDismiss: (_) async {
+        ZeetHaptics.warning();
+        Routes.pushMissionDetails(missionId: mission.id.toString());
+        // Retourne false : la card reste en place, on revient sur Home
+        // une fois le signalement fait depuis le détail.
+        return false;
+      },
+      child: MissionCard(mission: mission),
     );
   }
 }
@@ -122,67 +183,6 @@ class _LoadingState extends StatelessWidget {
         itemHeight: 140,
         padding: EdgeInsets.zero,
         gap: 12,
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({
-    required this.message,
-    required this.textColor,
-    required this.surfaceColor,
-    required this.isDarkMode,
-    required this.onRetry,
-  });
-
-  final String message;
-  final Color textColor;
-  final Color surfaceColor;
-  final bool isDarkMode;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSizes().paddingLarge),
-      child: Container(
-        padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: surfaceColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDarkMode
-                ? Colors.white.withValues(alpha: 0.1)
-                : Colors.grey.withValues(alpha: 0.15),
-            width: 1,
-          ),
-        ),
-        child: Center(
-          child: Column(
-            children: [
-              IconManager.getIcon(
-                'warning',
-                color: Colors.redAccent,
-                size: 40,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                message,
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 14.sp,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: onRetry,
-                child: const Text('Reessayer'),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

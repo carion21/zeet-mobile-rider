@@ -5,10 +5,10 @@
 // et indicateur de statut centre via [RiderStatusToggle].
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:rider/core/constants/colors.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 import 'package:rider/core/constants/icons.dart';
 import 'package:rider/core/constants/sizes.dart';
 import 'package:rider/providers/auth_provider.dart';
@@ -72,28 +72,36 @@ class _AvatarButton extends ConsumerWidget {
     final initials = ref.watch(currentRiderProvider)?.initials ?? '';
     // Tap → profile complet. Long-press → mini-card peek (skill
     // `zeet-3-clicks-rule` §5bis — preview sans nav).
+    // Hit zone 48x48 (Android) / 44pt (iOS) autour du visuel 40dp.
     return Tooltip(
       message: 'Profil — long-press pour voir mes infos',
-      child: GestureDetector(
-        onTap: () => ref.read(mainTabIndexProvider.notifier).goProfile(),
-        onLongPress: () {
-          HapticFeedback.mediumImpact();
-          showRiderQuickPeekSheet(context);
-        },
-        child: Container(
-          width: 40,
-          height: 40,
-          decoration: const BoxDecoration(
-            color: AppColors.primary,
-            shape: BoxShape.circle,
-          ),
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => ref.read(mainTabIndexProvider.notifier).goProfile(),
+          onLongPress: () {
+            ZeetHaptics.warning();
+            showRiderQuickPeekSheet(context);
+          },
           child: Center(
-            child: Text(
-              initials,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16.sp,
-                fontWeight: FontWeight.bold,
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: const BoxDecoration(
+                color: AppColors.primary,
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  initials,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
           ),
@@ -140,7 +148,7 @@ class _NotificationsButton extends ConsumerWidget {
                     '$unreadCount',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 10.sp,
+                      fontSize: 12.sp,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

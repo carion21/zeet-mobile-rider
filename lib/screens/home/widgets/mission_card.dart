@@ -3,7 +3,6 @@
 // Card de mission reutilisable (available + ongoing). Conserve le Hero
 // `mission-ref-${mission.id}` qui flie vers le header du detail.
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/core/constants/icons.dart';
@@ -42,7 +41,7 @@ class MissionCard extends StatelessWidget {
       ),
       child: InkWell(
         onTap: () {
-          HapticFeedback.selectionClick();
+          ZeetHaptics.tap();
           Routes.pushMissionDetails(missionId: mission.id.toString());
         },
         borderRadius: BorderRadius.circular(12),
@@ -208,7 +207,7 @@ class _SmallBadge extends StatelessWidget {
             text,
             style: TextStyle(
               color: color,
-              fontSize: 11.sp,
+              fontSize: 12.sp,
               fontWeight: FontWeight.w500,
             ),
           ),

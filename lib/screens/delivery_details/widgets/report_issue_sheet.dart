@@ -11,7 +11,6 @@
 // le payload et on retourne success pour ne pas bloquer le rider.
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:rider/core/widgets/toastification.dart';
 import 'package:rider/services/support_service.dart';
@@ -76,7 +75,7 @@ class _ReportIssueSheetState extends State<_ReportIssueSheet> {
   Future<void> _submit() async {
     if (_selectedReason == null || _submitting) return;
     setState(() => _submitting = true);
-    HapticFeedback.mediumImpact();
+    ZeetHaptics.warning();
 
     final result = await SupportService().createTicket(
       missionId: widget.missionId,
@@ -91,7 +90,7 @@ class _ReportIssueSheetState extends State<_ReportIssueSheet> {
     if (!mounted) return;
 
     if (result['success'] == true) {
-      HapticFeedback.lightImpact();
+      ZeetHaptics.success();
       Navigator.of(context).pop();
       AppToast.showSuccess(
         context: context,
@@ -175,7 +174,7 @@ class _ReportIssueSheetState extends State<_ReportIssueSheet> {
                   final selected = _selectedReason == reason;
                   return GestureDetector(
                     onTap: () {
-                      HapticFeedback.selectionClick();
+                      ZeetHaptics.tap();
                       setState(() => _selectedReason = reason);
                     },
                     child: Container(

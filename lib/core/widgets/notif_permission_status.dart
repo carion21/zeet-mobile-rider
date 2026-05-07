@@ -17,6 +17,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:rider/core/constants/colors.dart';
 import 'package:rider/services/fcm_service.dart';
 import 'package:rider/services/permissions_service.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 
 /// Pill d'etat (icone + label) affichee dans une tuile Profile.
 /// 3 etats :
@@ -106,12 +107,12 @@ class _NotifPermissionTileState extends State<NotifPermissionTile>
     switch (_status) {
       case ZeetPermissionStatus.granted:
         icon = Icons.notifications_active_rounded;
-        accent = const Color(0xFF10B981); // success
+        accent = ZeetColors.success;
         label = 'Notifications activées';
         hint = 'Tu seras alerté dès qu\'une mission tombe.';
       case ZeetPermissionStatus.permanentlyDenied:
         icon = Icons.notifications_off_rounded;
-        accent = const Color(0xFFD32F2F);
+        accent = ZeetColors.danger;
         label = 'Notifications bloquées';
         hint = 'Ouvre les Réglages pour réactiver les missions en temps réel.';
       case ZeetPermissionStatus.notApplicable:

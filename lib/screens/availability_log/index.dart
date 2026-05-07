@@ -10,7 +10,6 @@
 // - Accessible via profile > "Historique disponibilité"
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
@@ -79,18 +78,19 @@ class _AvailabilityLogScreenState
           icon: const Icon(Icons.arrow_back_rounded),
           tooltip: 'Retour',
           onPressed: () {
-            HapticFeedback.lightImpact();
+            ZeetHaptics.success();
             Routes.goBack();
           },
         ),
         actions: <Widget>[
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Rafraichir',
+            iconSize: 28,
+            tooltip: 'Rafraîchir',
             onPressed: state.isLoading
                 ? null
                 : () {
-                    HapticFeedback.lightImpact();
+                    ZeetHaptics.success();
                     _refreshAll();
                   },
           ),
@@ -133,7 +133,7 @@ class _AvailabilityLogScreenState
           icon: Icons.schedule_rounded,
           title: 'Aucun historique',
           description:
-              'Votre activité en ligne sera enregistrée ici dès vos prochaines sessions.',
+              'Ton activité en ligne sera enregistrée ici dès tes prochaines sessions.',
         ),
       );
     }

@@ -11,6 +11,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zeet_ui/zeet_ui.dart';
 
 const String _kCoachShownPrefKey = 'slide_to_accept_coach_v1';
 
@@ -75,7 +76,7 @@ class _FirstRunSwipeHintState extends State<FirstRunSwipeHint>
     return Padding(
       padding: EdgeInsets.only(bottom: 12.h),
       child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 300),
+        duration: ZeetMotion.md,
         opacity: _visible ? 1 : 0,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,

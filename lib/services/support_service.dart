@@ -5,12 +5,17 @@
 // support a brancher cote backend) + `zeet-store-readiness` plainte #4
 // (support inefficace : ouvrir un ticket avec contexte pre-rempli).
 //
-// L'endpoint `/v1/rider/tickets` est suppose mais NON encore confirme
-// par api-reference.json (qui ne liste que `/v1/client/tickets`). Si
-// l'API retourne 404, on log et on retourne un succes silencieux pour
-// ne pas bloquer le rider — le ticket sera alors persiste cote local
-// pour rejeu via la queue offline (TODO).
+// IMPORTANT — etat backend (audit 2026-05) :
+// L'endpoint `/v1/rider/tickets` n'existe PAS cote zeet-core-system.
+// Le backend expose uniquement `/v1/client/tickets`, `/v1/partner/tickets`
+// et `/v1/admin/tickets`. Tant que la route rider n'est pas deployee
+// (TODO core-system), on tombe systematiquement en fallback 404.
+// Cote rider on transforme alors le 404 en message honnete avec un
+// fallback contact direct (WhatsApp/telephone) — pas de "succes
+// silencieux" mensonger qui laisserait croire que le ticket a ete
+// pris en charge.
 
+import 'package:flutter/foundation.dart';
 import 'package:rider/core/constants/api.dart';
 import 'package:rider/services/api_client.dart';
 
@@ -19,6 +24,11 @@ class SupportService {
 
   SupportService({ApiClient? apiClient})
       : _apiClient = apiClient ?? ApiClient.instance;
+
+  /// Numero WhatsApp support ZEET — fallback quand l'endpoint rider
+  /// n'est pas (encore) deploye. A externaliser dans une remote config
+  /// quand le mecanisme sera en place.
+  static const String supportWhatsappNumber = '+221 78 000 00 00';
 
   /// Cree un ticket support contextualise depuis une mission rider.
   ///
@@ -61,14 +71,22 @@ class SupportService {
             'Ticket envoye. Le support te recontacte vite.',
       };
     } on ApiException catch (e) {
-      // 404 : endpoint pas encore deploye cote backend → on accepte
-      // optimistement et on log. Le rider voit un succes pour ne pas
-      // etre bloque.
+      // 404 : endpoint `/rider/tickets` pas deploye cote core-system.
+      // On retourne un echec EXPLICITE avec fallback WhatsApp pour ne
+      // pas mentir au rider (ne PAS pretendre que le ticket est pris).
       if (e.statusCode == 404) {
+        if (kDebugMode) {
+          debugPrint(
+            '[SupportService] 404 sur ${SupportEndpoints.createTicket} — '
+            'endpoint rider non deploye (cf. backend audit 2026-05).',
+          );
+        }
         return <String, dynamic>{
-          'success': true,
-          'ticketId': null,
-          'message': 'Ticket enregistre. Le support va te recontacter.',
+          'success': false,
+          'fallbackContact': supportWhatsappNumber,
+          'message':
+              "Le support en ligne sera disponible bientôt. En attendant, "
+              "contacte-nous sur WhatsApp au $supportWhatsappNumber.",
         };
       }
       return <String, dynamic>{

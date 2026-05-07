@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rider/models/mission_model.dart';
 import 'package:rider/models/queued_action.dart';
 import 'package:rider/services/api_client.dart';
+import 'package:rider/services/cache_policies.dart';
 import 'package:rider/services/location_tracking_service.dart';
 import 'package:rider/services/mission_local_cache.dart';
 import 'package:rider/services/mission_service.dart';
@@ -73,6 +74,7 @@ class MissionsListState {
 // ---------------------------------------------------------------------------
 class MissionsListNotifier extends StateNotifier<MissionsListState> {
   final MissionService _missionService;
+  DateTime? _lastFetchedAt;
 
   MissionsListNotifier(this._missionService) : super(const MissionsListState());
 
@@ -80,7 +82,17 @@ class MissionsListNotifier extends StateNotifier<MissionsListState> {
   /// Pattern offline-first : hydrate immédiatement depuis le cache local
   /// si state vide, puis tente l'API et persiste le résultat. En cas
   /// d'échec API, le cache reste affiché (skill `zeet-offline-first` §10).
-  Future<void> load() async {
+  /// [force] : si `true`, ignore le TTL [CachePolicy.missionsList] (30 s).
+  Future<void> load({bool force = false}) async {
+    // Court-circuit cache memoire : si on a deja une liste fraiche, no-op.
+    // (Le cache disque offline-first reste utile pour le cold-start.)
+    if (!force &&
+        _lastFetchedAt != null &&
+        CachePolicies.fresh(CachePolicy.missionsList, _lastFetchedAt!) &&
+        state.missions.isNotEmpty) {
+      return;
+    }
+
     // Hydrate cache si on n'a rien (évite l'écran vide en zone blanche).
     if (state.missions.isEmpty) {
       final List<Map<String, dynamic>> cached =
@@ -112,12 +124,15 @@ class MissionsListNotifier extends StateNotifier<MissionsListState> {
           rawItems.map((e) => Mission.fromJson(e)).toList();
 
       state = state.copyWith(missions: missions, isLoading: false);
+      _lastFetchedAt = DateTime.now();
 
       // Persist en arrière-plan (best-effort).
       unawaited(MissionLocalCache.instance.saveListRaw(rawItems));
     } on ApiException catch (e) {
+      _lastFetchedAt = null;
       state = state.copyWith(isLoading: false, errorMessage: e.message);
     } catch (e) {
+      _lastFetchedAt = null;
       // Si on a déjà du cache visible, ne pas écraser avec erreur bloquante.
       state = state.copyWith(
         isLoading: false,
@@ -128,8 +143,35 @@ class MissionsListNotifier extends StateNotifier<MissionsListState> {
     }
   }
 
-  /// Rafraichit la liste des missions.
-  Future<void> refresh() => load();
+  /// Rafraichit la liste des missions (force refresh, bypass cache TTL).
+  Future<void> refresh() => load(force: true);
+
+  /// Rafraichit silencieusement la liste sans toucher a `isLoading`
+  /// (pour les events push). Conserve l'etat actuel pendant le fetch et
+  /// ne remplace qu'a succes -> evite le flash du skeleton sur push live.
+  Future<void> silentRefresh() async {
+    try {
+      final response = await _missionService.listMissions();
+      final dataRaw = response['data'];
+
+      List<Map<String, dynamic>> rawItems = const <Map<String, dynamic>>[];
+      if (dataRaw is List) {
+        rawItems = dataRaw.whereType<Map<String, dynamic>>().toList();
+      } else if (dataRaw is Map<String, dynamic> && dataRaw['items'] is List) {
+        rawItems = (dataRaw['items'] as List)
+            .whereType<Map<String, dynamic>>()
+            .toList();
+      }
+      final List<Mission> missions =
+          rawItems.map((e) => Mission.fromJson(e)).toList();
+
+      state = state.copyWith(missions: missions);
+      _lastFetchedAt = DateTime.now();
+      unawaited(MissionLocalCache.instance.saveListRaw(rawItems));
+    } catch (_) {
+      // Silencieux : pas de loader, pas d'erreur affichee.
+    }
+  }
 
   /// Met a jour le statut d'une mission localement (apres une action).
   /// Re-persiste le cache pour que le cold-start ne reaffiche pas un statut
@@ -212,12 +254,24 @@ class MissionDetailState {
 // ---------------------------------------------------------------------------
 class MissionDetailNotifier extends StateNotifier<MissionDetailState> {
   final MissionService _missionService;
+  DateTime? _lastFetchedAt;
+  String? _lastFetchedId;
 
   MissionDetailNotifier(this._missionService) : super(const MissionDetailState());
 
   /// Charge le detail d'une mission.
   /// Offline-first : hydrate cache → tente API → persiste.
-  Future<void> load(String id) async {
+  /// [force] : si `true`, ignore le TTL [CachePolicy.missionDetail] (15 s).
+  Future<void> load(String id, {bool force = false}) async {
+    // Court-circuit cache memoire : meme id, donnee fraiche → no-op.
+    if (!force &&
+        _lastFetchedAt != null &&
+        _lastFetchedId == id &&
+        CachePolicies.fresh(CachePolicy.missionDetail, _lastFetchedAt!) &&
+        state.mission != null) {
+      return;
+    }
+
     // Hydrate depuis cache si on n'a rien.
     if (state.mission == null) {
       final Map<String, dynamic>? cached =
@@ -237,16 +291,42 @@ class MissionDetailNotifier extends StateNotifier<MissionDetailState> {
       final mission = Mission.fromJson(data);
 
       state = state.copyWith(mission: mission, isLoading: false);
+      _lastFetchedAt = DateTime.now();
+      _lastFetchedId = id;
       unawaited(MissionLocalCache.instance.saveDetailRaw(id, data));
     } on ApiException catch (e) {
+      _lastFetchedAt = null;
+      _lastFetchedId = null;
       state = state.copyWith(isLoading: false, errorMessage: e.message);
     } catch (_) {
+      _lastFetchedAt = null;
+      _lastFetchedId = null;
       state = state.copyWith(
         isLoading: false,
         errorMessage: state.mission == null
             ? 'Impossible de charger la mission'
             : null,
       );
+    }
+  }
+
+  /// Rafraichit silencieusement le detail sans toucher a `isLoading`
+  /// (pour les events push). Patche la mission seulement a succes -> evite
+  /// le flash du skeleton sur push live.
+  Future<void> silentRefresh(int missionId) async {
+    try {
+      final response = await _missionService.getMission(missionId.toString());
+      final data = response['data'] as Map<String, dynamic>? ?? response;
+      final mission = Mission.fromJson(data);
+      state = state.copyWith(mission: mission);
+      _lastFetchedAt = DateTime.now();
+      _lastFetchedId = missionId.toString();
+      unawaited(MissionLocalCache.instance.saveDetailRaw(
+        missionId.toString(),
+        data,
+      ));
+    } catch (_) {
+      // Silencieux : pas de loader, pas d'erreur affichee.
     }
   }
 
