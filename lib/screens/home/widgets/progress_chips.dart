@@ -90,14 +90,17 @@ class ProgressChips extends ConsumerWidget {
                   children: <Widget>[
                     Icon(Icons.flag_outlined, color: muted, size: 14.sp),
                     SizedBox(width: 6.w),
-                    Text(
-                      'Définir un objectif du jour',
-                      style: TextStyle(
-                        color: muted,
-                        fontSize: 12.sp,
-                        fontWeight: FontWeight.w600,
-                        decoration: TextDecoration.underline,
-                        decorationColor: muted,
+                    Flexible(
+                      child: Text(
+                        'Définir un objectif du jour',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: muted,
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.underline,
+                          decorationColor: muted,
+                        ),
                       ),
                     ),
                   ],
