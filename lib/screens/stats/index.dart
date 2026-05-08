@@ -78,33 +78,28 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
   // Period helpers
   // ---------------------------------------------------------------------------
 
-  ({String from, String to}) _rangeForPreset(_StatsPreset preset) {
+  /// Bornes pour le preset.
+  /// - `today` : null/null → laisse le backend calculer la "journée commerciale"
+  ///   (business day cutoff configurable, default 4h). Une livraison à 1h du matin
+  ///   compte sur la session de la veille.
+  /// - `week`  : lundi 00:00 → dimanche 23:59:59 (semaine ISO complète)
+  /// - `month` : 1er → dernier jour du mois (mois calendaire complet)
+  ({String? from, String? to}) _rangeForPreset(_StatsPreset preset) {
     final now = DateTime.now();
-    late DateTime from;
-    late DateTime to;
+    final fmt = DateFormat('yyyy-MM-dd');
     switch (preset) {
       case _StatsPreset.today:
-        // Aujourd'hui : 00:00 -> 23:59:59 (= demain 00:00 exclu)
-        from = DateTime(now.year, now.month, now.day);
-        to = DateTime(now.year, now.month, now.day, 23, 59, 59);
-        break;
+        // Pas de bornes côté client : backend résout via business day cutoff
+        return (from: null, to: null);
       case _StatsPreset.week:
-        // Semaine ISO : lundi -> dimanche complet (pas borné à aujourd'hui)
         final monday = now.subtract(Duration(days: now.weekday - 1));
         final sunday = monday.add(const Duration(days: 6));
-        from = DateTime(monday.year, monday.month, monday.day);
-        to = DateTime(sunday.year, sunday.month, sunday.day, 23, 59, 59);
-        break;
+        return (from: fmt.format(monday), to: fmt.format(sunday));
       case _StatsPreset.month:
-        // Mois : 1er -> dernier jour du mois courant (pas borné à aujourd'hui)
-        from = DateTime(now.year, now.month, 1);
-        // Astuce : jour 0 du mois suivant = dernier jour du mois courant
+        final firstDay = DateTime(now.year, now.month, 1);
         final lastDay = DateTime(now.year, now.month + 1, 0);
-        to = DateTime(lastDay.year, lastDay.month, lastDay.day, 23, 59, 59);
-        break;
+        return (from: fmt.format(firstDay), to: fmt.format(lastDay));
     }
-    final fmt = DateFormat('yyyy-MM-dd');
-    return (from: fmt.format(from), to: fmt.format(to));
   }
 
   String _earningsPeriodForPreset(_StatsPreset preset) {
