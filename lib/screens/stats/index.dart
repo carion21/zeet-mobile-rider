@@ -57,8 +57,16 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadForCurrentPreset();
-      // Le chart "gains par jour" continue d'utiliser earnings_provider.
-      ref.read(earningsSummaryProvider.notifier).load(period: 'month');
+      // Chart "gains par période" : doit recevoir les bornes du preset courant
+      // sinon backend agrège tout l'historique et mois/semaine se ressemblent.
+      final range = _rangeForPreset(_preset);
+      ref
+          .read(earningsSummaryProvider.notifier)
+          .load(
+            period: _earningsPeriodForPreset(_preset),
+            dateFrom: range.from,
+            dateTo: range.to,
+          );
       // Historique des transactions (gains/jour, primes, pourboires) —
       // backend `/v1/rider/earnings/history`. Charge la 1ere page,
       // l'utilisateur peut paginer via le bouton "Voir plus".
@@ -76,18 +84,23 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
     late DateTime to;
     switch (preset) {
       case _StatsPreset.today:
+        // Aujourd'hui : 00:00 -> 23:59:59 (= demain 00:00 exclu)
         from = DateTime(now.year, now.month, now.day);
         to = DateTime(now.year, now.month, now.day, 23, 59, 59);
         break;
       case _StatsPreset.week:
-        // Semaine : lundi -> aujourd'hui
+        // Semaine ISO : lundi -> dimanche complet (pas borné à aujourd'hui)
         final monday = now.subtract(Duration(days: now.weekday - 1));
+        final sunday = monday.add(const Duration(days: 6));
         from = DateTime(monday.year, monday.month, monday.day);
-        to = DateTime(now.year, now.month, now.day, 23, 59, 59);
+        to = DateTime(sunday.year, sunday.month, sunday.day, 23, 59, 59);
         break;
       case _StatsPreset.month:
+        // Mois : 1er -> dernier jour du mois courant (pas borné à aujourd'hui)
         from = DateTime(now.year, now.month, 1);
-        to = DateTime(now.year, now.month, now.day, 23, 59, 59);
+        // Astuce : jour 0 du mois suivant = dernier jour du mois courant
+        final lastDay = DateTime(now.year, now.month + 1, 0);
+        to = DateTime(lastDay.year, lastDay.month, lastDay.day, 23, 59, 59);
         break;
     }
     final fmt = DateFormat('yyyy-MM-dd');
@@ -127,22 +140,34 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
     if (_preset == preset) return;
     ZeetHaptics.tap();
     setState(() => _preset = preset);
+    final range = _rangeForPreset(preset);
     await Future.wait([
       _loadForCurrentPreset(),
       ref
           .read(earningsSummaryProvider.notifier)
-          .load(period: _earningsPeriodForPreset(preset)),
+          .load(
+            period: _earningsPeriodForPreset(preset),
+            dateFrom: range.from,
+            dateTo: range.to,
+            force: true,
+          ),
     ]);
     _freshKey.currentState?.bump();
   }
 
   Future<void> _refreshAll() async {
     ZeetHaptics.success();
+    final range = _rangeForPreset(_preset);
     await Future.wait([
       _loadForCurrentPreset(),
       ref
           .read(earningsSummaryProvider.notifier)
-          .load(period: _earningsPeriodForPreset(_preset)),
+          .load(
+            period: _earningsPeriodForPreset(_preset),
+            dateFrom: range.from,
+            dateTo: range.to,
+            force: true,
+          ),
     ]);
     _freshKey.currentState?.bump();
   }
@@ -338,7 +363,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           ),
           SizedBox(height: 8.h),
           Text(
-            'Vos livraisons apparaitront ici.',
+            'Tes livraisons apparaîtront ici.',
             textAlign: TextAlign.center,
             style: TextStyle(color: textLightColor, fontSize: 13.sp),
           ),
@@ -360,7 +385,9 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
     bool isDarkMode,
   ) {
     final stats = statsState.stats;
-    final isEmpty = stats != null && stats.totalDeliveries == 0;
+    // stats == null hors loading/erreur (cas: cache vide, race après reset) :
+    // afficher empty plutôt que crasher sur `stats!` plus bas.
+    final isEmpty = stats == null || stats.totalDeliveries == 0;
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -382,7 +409,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                   _buildEmptyState(textColor, textLightColor)
                 else ...[
                   _buildEarningsHero(
-                    stats!,
+                    stats,
                     surfaceColor,
                     textColor,
                     textLightColor,
@@ -448,36 +475,37 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
       child: Row(
-        children: _StatsPreset.values.map((p) {
-          final selected = p == _preset;
-          return Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(
-                right: p == _StatsPreset.values.last ? 0 : 8.w,
-              ),
-              child: Material(
-                color: selected ? AppColors.primary : surfaceColor,
-                borderRadius: BorderRadius.circular(10.r),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(10.r),
-                  onTap: () => _onPresetTap(p),
-                  child: Container(
-                    alignment: Alignment.center,
-                    padding: EdgeInsets.symmetric(vertical: 12.h),
-                    child: Text(
-                      _labelForPreset(p),
-                      style: TextStyle(
-                        color: selected ? Colors.white : textColor,
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.w600,
+        children:
+            _StatsPreset.values.map((p) {
+              final selected = p == _preset;
+              return Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    right: p == _StatsPreset.values.last ? 0 : 8.w,
+                  ),
+                  child: Material(
+                    color: selected ? AppColors.primary : surfaceColor,
+                    borderRadius: BorderRadius.circular(10.r),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10.r),
+                      onTap: () => _onPresetTap(p),
+                      child: Container(
+                        alignment: Alignment.center,
+                        padding: EdgeInsets.symmetric(vertical: 12.h),
+                        child: Text(
+                          _labelForPreset(p),
+                          style: TextStyle(
+                            color: selected ? Colors.white : textColor,
+                            fontSize: 13.sp,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ),
-          );
-        }).toList(),
+              );
+            }).toList(),
       ),
     );
   }
@@ -656,9 +684,10 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
         color: surfaceColor,
         borderRadius: BorderRadius.circular(16.r),
         border: Border.all(
-          color: isDarkMode
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.grey.withValues(alpha: 0.15),
+          color:
+              isDarkMode
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.grey.withValues(alpha: 0.15),
           width: 1,
         ),
       ),
@@ -669,7 +698,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
             label,
             style: TextStyle(
               color: textLightColor,
-              fontSize: 12.sp,
+              fontSize: 13.sp,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -696,7 +725,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
           SizedBox(height: 6.h),
           Text(
             helper,
-            style: TextStyle(color: textLightColor, fontSize: 12.sp),
+            style: TextStyle(color: textLightColor, fontSize: 13.sp),
           ),
         ],
       ),
@@ -720,9 +749,10 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
         color: surfaceColor,
         borderRadius: BorderRadius.circular(16.r),
         border: Border.all(
-          color: isDarkMode
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.grey.withValues(alpha: 0.15),
+          color:
+              isDarkMode
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.grey.withValues(alpha: 0.15),
           width: 1,
         ),
       ),
@@ -752,7 +782,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                   'Note moyenne',
                   style: TextStyle(
                     color: textLightColor,
-                    fontSize: 12.sp,
+                    fontSize: 13.sp,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -786,10 +816,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                 SizedBox(height: 2.h),
                 Text(
                   '${stats.ratingCount} avis',
-                  style: TextStyle(
-                    color: textLightColor,
-                    fontSize: 12.sp,
-                  ),
+                  style: TextStyle(color: textLightColor, fontSize: 13.sp),
                 ),
               ],
             ),
@@ -822,9 +849,10 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
     bool isDarkMode,
   ) {
     final points = summary?.byPeriod ?? const <EarningsPeriodPoint>[];
-    final data = points
-        .map((p) => _ChartData(_formatPointLabel(p.date), p.earnings))
-        .toList();
+    final data =
+        points
+            .map((p) => _ChartData(_formatPointLabel(p.date), p.earnings))
+            .toList();
 
     return Container(
       padding: EdgeInsets.all(20.w),
@@ -832,9 +860,10 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
         color: surfaceColor,
         borderRadius: BorderRadius.circular(16.r),
         border: Border.all(
-          color: isDarkMode
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.grey.withValues(alpha: 0.15),
+          color:
+              isDarkMode
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.grey.withValues(alpha: 0.15),
           width: 1,
         ),
       ),
@@ -884,18 +913,17 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                 plotAreaBorderWidth: 0,
                 primaryXAxis: CategoryAxis(
                   majorGridLines: const MajorGridLines(width: 0),
-                  labelStyle:
-                      TextStyle(color: textLightColor, fontSize: 12.sp),
+                  labelStyle: TextStyle(color: textLightColor, fontSize: 13.sp),
                 ),
                 primaryYAxis: NumericAxis(
                   majorGridLines: MajorGridLines(
                     width: 1,
-                    color: isDarkMode
-                        ? Colors.white.withValues(alpha: 0.05)
-                        : Colors.grey.withValues(alpha: 0.1),
+                    color:
+                        isDarkMode
+                            ? Colors.white.withValues(alpha: 0.05)
+                            : Colors.grey.withValues(alpha: 0.1),
                   ),
-                  labelStyle:
-                      TextStyle(color: textLightColor, fontSize: 12.sp),
+                  labelStyle: TextStyle(color: textLightColor, fontSize: 13.sp),
                   numberFormat: NumberFormat.compact(locale: 'fr_FR'),
                 ),
                 series: <CartesianSeries>[
@@ -904,8 +932,9 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                     xValueMapper: (d, _) => d.label,
                     yValueMapper: (d, _) => d.value,
                     color: ZeetColors.success,
-                    borderRadius:
-                        const BorderRadius.vertical(top: Radius.circular(6)),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(6),
+                    ),
                   ),
                 ],
                 tooltipBehavior: TooltipBehavior(
@@ -968,9 +997,10 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
         color: surfaceColor,
         borderRadius: BorderRadius.circular(14.r),
         border: Border.all(
-          color: isDarkMode
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.grey.withValues(alpha: 0.15),
+          color:
+              isDarkMode
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.grey.withValues(alpha: 0.15),
           width: 1,
         ),
       ),
@@ -995,10 +1025,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
             ),
           ),
           SizedBox(height: 2.h),
-          Text(
-            label,
-            style: TextStyle(color: textLightColor, fontSize: 12.sp),
-          ),
+          Text(label, style: TextStyle(color: textLightColor, fontSize: 13.sp)),
         ],
       ),
     );
@@ -1043,7 +1070,9 @@ class _EarningsHistorySection extends ConsumerWidget {
         isDarkMode ? ZeetColors.lineDark : ZeetColors.line;
 
     final List<EarningsEntry> visible =
-        state.entries.take(_previewLimit + (state.currentPage - 1) * 10).toList();
+        state.entries
+            .take(_previewLimit + (state.currentPage - 1) * 10)
+            .toList();
 
     return Container(
       decoration: BoxDecoration(
@@ -1058,8 +1087,11 @@ class _EarningsHistorySection extends ConsumerWidget {
             padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 8.h),
             child: Row(
               children: <Widget>[
-                Icon(Icons.receipt_long_rounded,
-                    color: textLightColor, size: 18.sp),
+                Icon(
+                  Icons.receipt_long_rounded,
+                  color: textLightColor,
+                  size: 18.sp,
+                ),
                 SizedBox(width: 8.w),
                 Text(
                   'Historique des transactions',
@@ -1111,20 +1143,23 @@ class _EarningsHistorySection extends ConsumerWidget {
               padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
               child: Center(
                 child: TextButton.icon(
-                  onPressed: state.isLoadingMore
-                      ? null
-                      : () => notifier.loadMore(),
-                  icon: state.isLoadingMore
-                      ? SizedBox(
-                          width: 14.sp,
-                          height: 14.sp,
-                          child: const CircularProgressIndicator(
-                            strokeWidth: 2,
+                  onPressed:
+                      state.isLoadingMore ? null : () => notifier.loadMore(),
+                  icon:
+                      state.isLoadingMore
+                          ? SizedBox(
+                            width: 14.sp,
+                            height: 14.sp,
+                            child: const CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: ZeetColors.primary,
+                            ),
+                          )
+                          : Icon(
+                            Icons.expand_more_rounded,
                             color: ZeetColors.primary,
+                            size: 18.sp,
                           ),
-                        )
-                      : Icon(Icons.expand_more_rounded,
-                          color: ZeetColors.primary, size: 18.sp),
                   label: Text(
                     state.isLoadingMore ? 'Chargement…' : 'Voir plus',
                     style: TextStyle(
@@ -1185,12 +1220,12 @@ class _EarningsEntryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool credit = entry.isCredit;
-    final Color amountColor =
-        credit ? ZeetColors.success : ZeetColors.danger;
+    final Color amountColor = credit ? ZeetColors.success : ZeetColors.danger;
     final String prefix = credit ? '+' : '';
-    final String label = entry.description?.trim().isNotEmpty == true
-        ? entry.description!
-        : entry.typeLabel;
+    final String label =
+        entry.description?.trim().isNotEmpty == true
+            ? entry.description!
+            : entry.typeLabel;
     final String dateLabel = _formatDate(entry.createdAt);
 
     return Container(
@@ -1229,7 +1264,7 @@ class _EarningsEntryTile extends StatelessWidget {
                   SizedBox(height: 2.h),
                   Text(
                     dateLabel,
-                    style: TextStyle(color: textLightColor, fontSize: 11.sp),
+                    style: TextStyle(color: textLightColor, fontSize: 13.sp),
                   ),
                 ],
               ],
