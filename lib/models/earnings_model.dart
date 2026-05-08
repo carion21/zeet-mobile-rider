@@ -25,14 +25,42 @@ class EarningsPeriodPoint {
   factory EarningsPeriodPoint.fromJson(Map<String, dynamic> json) {
     return EarningsPeriodPoint(
       date: (json['date'] ?? json['label'] ?? json['period'] ?? '').toString(),
-      deliveryCount: json['delivery_count'] as int?
-          ?? json['deliveries'] as int?
-          ?? json['count'] as int?
-          ?? 0,
-      earnings: _parseDouble(
+      deliveryCount:
+          json['delivery_count'] as int? ??
+          json['deliveries'] as int? ??
+          json['count'] as int? ??
+          0,
+      earnings:
+          _parseDouble(
             json['earnings'] ?? json['total_earnings'] ?? json['amount'],
           ) ??
           0,
+    );
+  }
+}
+
+/// Descriptif humain de la fenêtre de calcul, fourni par le backend.
+/// Les apps affichent `label` sous le filtre period et `tooltip` au tap.
+/// Aucun formatage de date côté client.
+class EarningsPeriodWindow {
+  final String from;
+  final String to;
+  final String label;
+  final String tooltip;
+
+  const EarningsPeriodWindow({
+    required this.from,
+    required this.to,
+    required this.label,
+    required this.tooltip,
+  });
+
+  factory EarningsPeriodWindow.fromJson(Map<String, dynamic> json) {
+    return EarningsPeriodWindow(
+      from: (json['from'] ?? '').toString(),
+      to: (json['to'] ?? '').toString(),
+      label: (json['label'] ?? '').toString(),
+      tooltip: (json['tooltip'] ?? '').toString(),
     );
   }
 }
@@ -50,6 +78,7 @@ class EarningsSummary {
   final String? period;
   final String? dateFrom;
   final String? dateTo;
+  final EarningsPeriodWindow? periodWindow;
   final List<EarningsPeriodPoint> byPeriod;
 
   const EarningsSummary({
@@ -64,34 +93,39 @@ class EarningsSummary {
     this.period,
     this.dateFrom,
     this.dateTo,
+    this.periodWindow,
     this.byPeriod = const [],
   });
 
   factory EarningsSummary.fromJson(Map<String, dynamic> json) {
-    final totalEarnings = _parseDouble(
-      json['total_earnings'] ?? json['total'] ?? json['amount'],
-    ) ?? 0;
-    final deliveryFees = _parseDouble(
-      json['delivery_fees'] ?? json['delivery_total'] ?? json['fees'],
-    ) ?? 0;
+    final totalEarnings =
+        _parseDouble(
+          json['total_earnings'] ?? json['total'] ?? json['amount'],
+        ) ??
+        0;
+    final deliveryFees =
+        _parseDouble(
+          json['delivery_fees'] ?? json['delivery_total'] ?? json['fees'],
+        ) ??
+        0;
     final tips = _parseDouble(json['tips'] ?? json['tip_total']) ?? 0;
     final bonuses = _parseDouble(json['bonuses'] ?? json['bonus_total']) ?? 0;
 
-    final totalDeliveries = json['total_deliveries'] as int?
-        ?? json['total_missions'] as int?
-        ?? json['count'] as int?
-        ?? 0;
-    final completedDeliveries = json['completed_deliveries'] as int?
-        ?? json['completed'] as int?
-        ?? 0;
-    final cancelledDeliveries = json['cancelled_deliveries'] as int?
-        ?? json['cancelled'] as int?
-        ?? 0;
-    final averagePerDelivery = _parseDouble(
-      json['average_per_delivery'] ?? json['average'],
-    ) ?? (completedDeliveries > 0 ? totalEarnings / completedDeliveries : 0);
+    final totalDeliveries =
+        json['total_deliveries'] as int? ??
+        json['total_missions'] as int? ??
+        json['count'] as int? ??
+        0;
+    final completedDeliveries =
+        json['completed_deliveries'] as int? ?? json['completed'] as int? ?? 0;
+    final cancelledDeliveries =
+        json['cancelled_deliveries'] as int? ?? json['cancelled'] as int? ?? 0;
+    final averagePerDelivery =
+        _parseDouble(json['average_per_delivery'] ?? json['average']) ??
+        (completedDeliveries > 0 ? totalEarnings / completedDeliveries : 0);
 
-    final byPeriodRaw = json['by_period'] ?? json['series'] ?? json['breakdown'];
+    final byPeriodRaw =
+        json['by_period'] ?? json['series'] ?? json['breakdown'];
     final byPeriod = <EarningsPeriodPoint>[];
     if (byPeriodRaw is List) {
       for (final item in byPeriodRaw) {
@@ -100,6 +134,13 @@ class EarningsSummary {
         }
       }
     }
+
+    final periodWindow =
+        json['period_window'] is Map<String, dynamic>
+            ? EarningsPeriodWindow.fromJson(
+              json['period_window'] as Map<String, dynamic>,
+            )
+            : null;
 
     return EarningsSummary(
       totalEarnings: totalEarnings,
@@ -113,6 +154,7 @@ class EarningsSummary {
       period: json['period'] as String?,
       dateFrom: json['date_from'] as String? ?? json['from'] as String?,
       dateTo: json['date_to'] as String? ?? json['to'] as String?,
+      periodWindow: periodWindow,
       byPeriod: byPeriod,
     );
   }
@@ -169,14 +211,27 @@ class EarningsEntry {
   bool get isCredit => amount >= 0;
 
   factory EarningsEntry.fromJson(Map<String, dynamic> json) {
+    // Le backend `/v1/rider/earnings/history` retourne aujourd'hui un payload
+    // orienté livraison ({delivery_id, delivery_code, date, delivery_fee, ...}),
+    // pas un journal de mouvements typés. On mappe avec fallback pour ne pas
+    // afficher "Gain — 0 FCFA" sur chaque ligne.
     return EarningsEntry(
-      id: json['id'] as int?,
-      type: json['type'] as String? ?? json['entry_type'] as String?,
-      amount: _parseDouble(json['amount'] ?? json['value']) ?? 0,
-      description: json['description'] as String? ?? json['label'] as String?,
-      reference: json['reference'] as String? ?? json['order_reference'] as String?,
+      id: (json['id'] ?? json['delivery_id']) as int?,
+      type: (json['type'] as String?) ??
+          (json['entry_type'] as String?) ??
+          (json['delivery_id'] != null ? 'delivery' : null),
+      amount: _parseDouble(
+            json['amount'] ?? json['value'] ?? json['delivery_fee'],
+          ) ??
+          0,
+      description: (json['description'] as String?) ??
+          (json['label'] as String?) ??
+          (json['delivery_code'] as String?),
+      reference: (json['reference'] as String?) ??
+          (json['order_reference'] as String?) ??
+          (json['order_code'] as String?),
       status: json['status'] as String?,
-      createdAt: json['created_at'] as String? ?? json['date'] as String?,
+      createdAt: (json['created_at'] as String?) ?? (json['date'] as String?),
       missionId: json['mission_id'] as int?,
       orderId: json['order_id'] as int?,
     );

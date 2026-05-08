@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:rider/models/rider_percentile_model.dart';
 import 'package:rider/models/rider_stats_model.dart';
 import 'package:rider/services/api_client.dart';
 import 'package:rider/services/cache_policies.dart';
@@ -18,6 +19,7 @@ class RiderStatsState {
   final RiderStats? stats;
   final bool isLoading;
   final String? errorMessage;
+  final String? currentPeriod;
   final String? currentDateFrom;
   final String? currentDateTo;
 
@@ -25,6 +27,7 @@ class RiderStatsState {
     this.stats,
     this.isLoading = false,
     this.errorMessage,
+    this.currentPeriod,
     this.currentDateFrom,
     this.currentDateTo,
   });
@@ -33,6 +36,7 @@ class RiderStatsState {
     RiderStats? stats,
     bool? isLoading,
     String? errorMessage,
+    String? currentPeriod,
     String? currentDateFrom,
     String? currentDateTo,
     bool clearError = false,
@@ -42,6 +46,7 @@ class RiderStatsState {
       stats: clearStats ? null : (stats ?? this.stats),
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      currentPeriod: currentPeriod ?? this.currentPeriod,
       currentDateFrom: currentDateFrom ?? this.currentDateFrom,
       currentDateTo: currentDateTo ?? this.currentDateTo,
     );
@@ -59,18 +64,22 @@ class RiderStatsNotifier extends StateNotifier<RiderStatsState> {
 
   /// Charge les statistiques.
   ///
-  /// [dateFrom] / [dateTo] : ISO 8601 dates optionnelles.
+  /// [period] : "day" | "week" | "month" — laisse le backend résoudre la
+  ///   fenêtre (journée commerciale pour day, semaine ISO, mois calendaire).
+  /// [dateFrom] / [dateTo] : ISO 8601 dates optionnelles, prioritaires sur period.
   /// [force] : si `true`, ignore le TTL [CachePolicy.stats] (5 min).
   Future<void> load({
+    String? period,
     String? dateFrom,
     String? dateTo,
     bool force = false,
   }) async {
-    // Court-circuit cache : meme periode, donnees fraiches → no-op.
+    // Court-circuit cache : memes parametres, donnees fraiches → no-op.
     if (!force &&
         _lastFetchedAt != null &&
         CachePolicies.fresh(CachePolicy.stats, _lastFetchedAt!) &&
         state.stats != null &&
+        state.currentPeriod == period &&
         state.currentDateFrom == dateFrom &&
         state.currentDateTo == dateTo) {
       return;
@@ -79,12 +88,14 @@ class RiderStatsNotifier extends StateNotifier<RiderStatsState> {
     state = state.copyWith(
       isLoading: true,
       clearError: true,
+      currentPeriod: period,
       currentDateFrom: dateFrom,
       currentDateTo: dateTo,
     );
 
     try {
       final response = await _service.getStats(
+        period: period,
         dateFrom: dateFrom,
         dateTo: dateTo,
       );
@@ -96,10 +107,7 @@ class RiderStatsNotifier extends StateNotifier<RiderStatsState> {
       _lastFetchedAt = DateTime.now();
     } on ApiException catch (e) {
       _lastFetchedAt = null;
-      state = state.copyWith(
-        isLoading: false,
-        errorMessage: e.message,
-      );
+      state = state.copyWith(isLoading: false, errorMessage: e.message);
     } catch (_) {
       _lastFetchedAt = null;
       state = state.copyWith(
@@ -111,10 +119,11 @@ class RiderStatsNotifier extends StateNotifier<RiderStatsState> {
 
   /// Rafraichit la periode courante (force refresh, bypass cache).
   Future<void> refresh() => load(
-        dateFrom: state.currentDateFrom,
-        dateTo: state.currentDateTo,
-        force: true,
-      );
+    period: state.currentPeriod,
+    dateFrom: state.currentDateFrom,
+    dateTo: state.currentDateTo,
+    force: true,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +131,31 @@ class RiderStatsNotifier extends StateNotifier<RiderStatsState> {
 // ---------------------------------------------------------------------------
 final riderStatsProvider =
     StateNotifierProvider<RiderStatsNotifier, RiderStatsState>((ref) {
+      final service = ref.watch(statsServiceProvider);
+      return RiderStatsNotifier(service);
+    });
+
+// ---------------------------------------------------------------------------
+// Rider Percentile (social proof — Top X % aujourd'hui)
+// ---------------------------------------------------------------------------
+//
+// FutureProvider auto-refresh sur invalidate. Pas de cache TTL côté client :
+// la donnée évolue à chaque livraison du jour, on accepte le cold-fetch
+// silencieux à chaque reprise du Home (la latence est acceptable, payload
+// petit).
+//
+// Échec gracieux : retourne null. La chip se masque côté UI si null.
+final riderPercentileProvider = FutureProvider.autoDispose<RiderPercentile?>((
+  ref,
+) async {
   final service = ref.watch(statsServiceProvider);
-  return RiderStatsNotifier(service);
+  try {
+    final response = await service.getPercentile();
+    final data = response['data'] as Map<String, dynamic>? ?? response;
+    return RiderPercentile.fromJson(data);
+  } on ApiException {
+    return null;
+  } catch (_) {
+    return null;
+  }
 });

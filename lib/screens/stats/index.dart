@@ -68,9 +68,13 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
             dateTo: range.to,
           );
       // Historique des transactions (gains/jour, primes, pourboires) —
-      // backend `/v1/rider/earnings/history`. Charge la 1ere page,
-      // l'utilisateur peut paginer via le bouton "Voir plus".
-      ref.read(earningsHistoryProvider.notifier).load();
+      // backend `/v1/rider/earnings/history`. On passe les bornes du preset
+      // courant : sans elles, la liste remonte tout l'historique du rider
+      // depuis l'origine et chaque ligne sans `delivery_fee` valorise s'affiche
+      // a 0 FCFA.
+      ref
+          .read(earningsHistoryProvider.notifier)
+          .load(dateFrom: range.from, dateTo: range.to);
     });
   }
 
@@ -128,7 +132,11 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
     final range = _rangeForPreset(_preset);
     return ref
         .read(riderStatsProvider.notifier)
-        .load(dateFrom: range.from, dateTo: range.to);
+        .load(
+          period: _earningsPeriodForPreset(_preset),
+          dateFrom: range.from,
+          dateTo: range.to,
+        );
   }
 
   Future<void> _onPresetTap(_StatsPreset preset) async {
@@ -146,6 +154,11 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
             dateTo: range.to,
             force: true,
           ),
+      // Recharge l'historique sur la nouvelle periode — sinon l'utilisateur
+      // voit la liste de l'ancien preset.
+      ref
+          .read(earningsHistoryProvider.notifier)
+          .load(dateFrom: range.from, dateTo: range.to, force: true),
     ]);
     _freshKey.currentState?.bump();
   }
@@ -163,6 +176,9 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
             dateTo: range.to,
             force: true,
           ),
+      ref
+          .read(earningsHistoryProvider.notifier)
+          .load(dateFrom: range.from, dateTo: range.to, force: true),
     ]);
     _freshKey.currentState?.bump();
   }
@@ -467,40 +483,60 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
     Color textLightColor,
     Color surfaceColor,
   ) {
-    return Container(
+    // Label de la fenêtre de calcul, fourni par le backend (rider_stats.period_window).
+    // Affiché tel quel sous le filtre — aucun formatage côté client.
+    final stats = ref.watch(riderStatsProvider).stats;
+    final windowLabel = stats?.periodWindow?.label;
+    final windowTooltip = stats?.periodWindow?.tooltip;
+
+    return Padding(
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-      child: Row(
-        children:
-            _StatsPreset.values.map((p) {
-              final selected = p == _preset;
-              return Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(
-                    right: p == _StatsPreset.values.last ? 0 : 8.w,
-                  ),
-                  child: Material(
-                    color: selected ? AppColors.primary : surfaceColor,
-                    borderRadius: BorderRadius.circular(10.r),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(10.r),
-                      onTap: () => _onPresetTap(p),
-                      child: Container(
-                        alignment: Alignment.center,
-                        padding: EdgeInsets.symmetric(vertical: 12.h),
-                        child: Text(
-                          _labelForPreset(p),
-                          style: TextStyle(
-                            color: selected ? Colors.white : textColor,
-                            fontSize: 13.sp,
-                            fontWeight: FontWeight.w600,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children:
+                _StatsPreset.values.map((p) {
+                  final selected = p == _preset;
+                  return Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        right: p == _StatsPreset.values.last ? 0 : 8.w,
+                      ),
+                      child: Material(
+                        color: selected ? AppColors.primary : surfaceColor,
+                        borderRadius: BorderRadius.circular(10.r),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10.r),
+                          onTap: () => _onPresetTap(p),
+                          child: Container(
+                            alignment: Alignment.center,
+                            padding: EdgeInsets.symmetric(vertical: 12.h),
+                            child: Text(
+                              _labelForPreset(p),
+                              style: TextStyle(
+                                color: selected ? Colors.white : textColor,
+                                fontSize: 13.sp,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-              );
-            }).toList(),
+                  );
+                }).toList(),
+          ),
+          if (windowLabel != null && windowLabel.isNotEmpty) ...[
+            SizedBox(height: 10.h),
+            _PeriodWindowChip(
+              label: windowLabel,
+              tooltip: windowTooltip ?? '',
+              textColor: textColor,
+              textLightColor: textLightColor,
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -1032,6 +1068,75 @@ class _ChartData {
   final double value;
 
   const _ChartData(this.label, this.value);
+}
+
+// ---------------------------------------------------------------------------
+// Chip "fenêtre de calcul" — affiche le label backend (period_window.label)
+// avec une icône info qui révèle le tooltip détaillé au tap (SnackBar court).
+// Source unique de vérité : le backend. Aucune logique de date côté client.
+// ---------------------------------------------------------------------------
+class _PeriodWindowChip extends StatelessWidget {
+  const _PeriodWindowChip({
+    required this.label,
+    required this.tooltip,
+    required this.textColor,
+    required this.textLightColor,
+  });
+
+  final String label;
+  final String tooltip;
+  final Color textColor;
+  final Color textLightColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasTooltip = tooltip.isNotEmpty;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8.r),
+      onTap:
+          hasTooltip
+              ? () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(tooltip),
+                    duration: const Duration(seconds: 4),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+              : null,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 2.h),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.event_rounded, size: 14.sp, color: textLightColor),
+            SizedBox(width: 6.w),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: textLightColor,
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (hasTooltip) ...[
+              SizedBox(width: 4.w),
+              Icon(
+                Icons.info_outline_rounded,
+                size: 13.sp,
+                color: textLightColor,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

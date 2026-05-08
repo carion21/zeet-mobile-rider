@@ -52,7 +52,7 @@ class EarningsSummaryNotifier extends StateNotifier<EarningsSummaryState> {
   DateTime? _lastFetchedAt;
 
   EarningsSummaryNotifier(this._earningsService)
-      : super(const EarningsSummaryState());
+    : super(const EarningsSummaryState());
 
   /// Charge le resume des gains pour une periode donnee.
   /// [force] : si `true`, ignore le TTL [CachePolicy.earningsSummary] (2 min).
@@ -142,6 +142,9 @@ class EarningsHistoryState {
   final String? errorMessage;
   final int currentPage;
   final bool hasMore;
+  // Bornes courantes — utilisees par loadMore() pour rester sur la meme periode.
+  final String? dateFrom;
+  final String? dateTo;
 
   const EarningsHistoryState({
     this.entries = const [],
@@ -150,6 +153,8 @@ class EarningsHistoryState {
     this.errorMessage,
     this.currentPage = 1,
     this.hasMore = true,
+    this.dateFrom,
+    this.dateTo,
   });
 
   EarningsHistoryState copyWith({
@@ -159,7 +164,10 @@ class EarningsHistoryState {
     String? errorMessage,
     int? currentPage,
     bool? hasMore,
+    String? dateFrom,
+    String? dateTo,
     bool clearError = false,
+    bool clearRange = false,
   }) {
     return EarningsHistoryState(
       entries: entries ?? this.entries,
@@ -168,6 +176,8 @@ class EarningsHistoryState {
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       currentPage: currentPage ?? this.currentPage,
       hasMore: hasMore ?? this.hasMore,
+      dateFrom: clearRange ? null : (dateFrom ?? this.dateFrom),
+      dateTo: clearRange ? null : (dateTo ?? this.dateTo),
     );
   }
 }
@@ -181,13 +191,24 @@ class EarningsHistoryNotifier extends StateNotifier<EarningsHistoryState> {
   DateTime? _lastFetchedAt;
 
   EarningsHistoryNotifier(this._earningsService)
-      : super(const EarningsHistoryState());
+    : super(const EarningsHistoryState());
 
   /// Charge la premiere page de l'historique.
   /// [force] : si `true`, ignore le TTL [CachePolicy.earningsHistory] (5 min).
-  Future<void> load({bool force = false}) async {
-    // Court-circuit cache : si on a deja la page 1 fraiche, no-op.
+  /// [dateFrom] / [dateTo] : bornes optionnelles ; un changement de bornes
+  /// invalide automatiquement le cache (sinon la liste resterait coincee
+  /// sur la periode precedente apres un switch de preset).
+  Future<void> load({
+    bool force = false,
+    String? dateFrom,
+    String? dateTo,
+  }) async {
+    final rangeChanged =
+        dateFrom != state.dateFrom || dateTo != state.dateTo;
+
+    // Court-circuit cache : meme periode, donnees fraiches → no-op.
     if (!force &&
+        !rangeChanged &&
         _lastFetchedAt != null &&
         CachePolicies.fresh(CachePolicy.earningsHistory, _lastFetchedAt!) &&
         state.entries.isNotEmpty &&
@@ -200,10 +221,20 @@ class EarningsHistoryNotifier extends StateNotifier<EarningsHistoryState> {
       clearError: true,
       currentPage: 1,
       hasMore: true,
+      dateFrom: dateFrom,
+      dateTo: dateTo,
+      // Reset entries au changement de bornes pour eviter un flash de
+      // l'ancienne periode sous le skeleton.
+      entries: rangeChanged ? const <EarningsEntry>[] : state.entries,
     );
 
     try {
-      final response = await _earningsService.getHistory(page: 1, limit: _pageSize);
+      final response = await _earningsService.getHistory(
+        page: 1,
+        limit: _pageSize,
+        dateFrom: dateFrom,
+        dateTo: dateTo,
+      );
       final entries = _parseEntries(response);
 
       state = state.copyWith(
@@ -236,6 +267,8 @@ class EarningsHistoryNotifier extends StateNotifier<EarningsHistoryState> {
       final response = await _earningsService.getHistory(
         page: nextPage,
         limit: _pageSize,
+        dateFrom: state.dateFrom,
+        dateTo: state.dateTo,
       );
       final newEntries = _parseEntries(response);
 
@@ -253,7 +286,8 @@ class EarningsHistoryNotifier extends StateNotifier<EarningsHistoryState> {
   }
 
   /// Rafraichit (premiere page) en bypassant le cache TTL.
-  Future<void> refresh() => load(force: true);
+  Future<void> refresh() =>
+      load(force: true, dateFrom: state.dateFrom, dateTo: state.dateTo);
 
   /// Parse la liste d'entrees depuis la reponse API.
   List<EarningsEntry> _parseEntries(Map<String, dynamic> response) {
@@ -285,12 +319,12 @@ class EarningsHistoryNotifier extends StateNotifier<EarningsHistoryState> {
 
 final earningsSummaryProvider =
     StateNotifierProvider<EarningsSummaryNotifier, EarningsSummaryState>((ref) {
-  final service = ref.watch(earningsServiceProvider);
-  return EarningsSummaryNotifier(service);
-});
+      final service = ref.watch(earningsServiceProvider);
+      return EarningsSummaryNotifier(service);
+    });
 
 final earningsHistoryProvider =
     StateNotifierProvider<EarningsHistoryNotifier, EarningsHistoryState>((ref) {
-  final service = ref.watch(earningsServiceProvider);
-  return EarningsHistoryNotifier(service);
-});
+      final service = ref.watch(earningsServiceProvider);
+      return EarningsHistoryNotifier(service);
+    });

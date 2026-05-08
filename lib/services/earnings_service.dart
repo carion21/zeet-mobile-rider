@@ -7,7 +7,7 @@ class EarningsService {
   final ApiClient _apiClient;
 
   EarningsService({ApiClient? apiClient})
-      : _apiClient = apiClient ?? ApiClient.instance;
+    : _apiClient = apiClient ?? ApiClient.instance;
 
   // ---------------------------------------------------------------------------
   // GET /v1/rider/earnings
@@ -23,9 +23,15 @@ class EarningsService {
     String? dateTo,
   }) async {
     final queryParams = <String, String>{};
-    if (period != null && period.isNotEmpty) queryParams['period'] = period;
-    if (dateFrom != null && dateFrom.isNotEmpty) queryParams['date_from'] = dateFrom;
-    if (dateTo != null && dateTo.isNotEmpty) queryParams['date_to'] = dateTo;
+    if (period != null && period.isNotEmpty) {
+      queryParams['period'] = period;
+    }
+    if (dateFrom != null && dateFrom.isNotEmpty) {
+      queryParams['date_from'] = dateFrom;
+    }
+    if (dateTo != null && dateTo.isNotEmpty) {
+      queryParams['date_to'] = dateTo;
+    }
 
     final response = await _apiClient.get(
       EarningsEndpoints.summary,
@@ -41,14 +47,24 @@ class EarningsService {
   ///
   /// [page] : numero de page (defaut 1).
   /// [limit] : nombre d'entrees par page (defaut 10).
+  /// [dateFrom] / [dateTo] : bornes optionnelles (YYYY-MM-DD) pour cadrer
+  /// l'historique sur la periode active du screen Stats (today/week/month).
   Future<Map<String, dynamic>> getHistory({
     int page = 1,
     int limit = 10,
+    String? dateFrom,
+    String? dateTo,
   }) async {
     final queryParams = <String, String>{
       'page': page.toString(),
       'limit': limit.toString(),
     };
+    if (dateFrom != null && dateFrom.isNotEmpty) {
+      queryParams['date_from'] = dateFrom;
+    }
+    if (dateTo != null && dateTo.isNotEmpty) {
+      queryParams['date_to'] = dateTo;
+    }
 
     final response = await _apiClient.get(
       EarningsEndpoints.history,

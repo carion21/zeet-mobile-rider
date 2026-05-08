@@ -7,18 +7,22 @@ class StatsService {
   final ApiClient _apiClient;
 
   StatsService({ApiClient? apiClient})
-      : _apiClient = apiClient ?? ApiClient.instance;
+    : _apiClient = apiClient ?? ApiClient.instance;
 
   /// Recupere les statistiques du rider.
   ///
-  /// [dateFrom] et [dateTo] sont des ISO dates (YYYY-MM-DD) optionnelles.
-  /// Sans parametres, le backend applique sa periode par defaut (generalement
-  /// mois courant).
+  /// [period] : "day" | "week" | "month" — laisse le backend résoudre la fenêtre
+  ///   (journée commerciale pour day, semaine ISO pour week, mois calendaire pour month).
+  /// [dateFrom] / [dateTo] : ISO dates optionnelles, prioritaires sur [period].
   Future<Map<String, dynamic>> getStats({
+    String? period,
     String? dateFrom,
     String? dateTo,
   }) async {
     final queryParams = <String, String>{};
+    if (period != null && period.isNotEmpty) {
+      queryParams['period'] = period;
+    }
     if (dateFrom != null && dateFrom.isNotEmpty) {
       queryParams['date_from'] = dateFrom;
     }
@@ -31,5 +35,11 @@ class StatsService {
       queryParams: queryParams.isNotEmpty ? queryParams : null,
     );
     return response;
+  }
+
+  /// Recupere le classement du rider parmi les actifs aujourd'hui.
+  /// Source de la chip social proof "Top X %" sur le Home.
+  Future<Map<String, dynamic>> getPercentile() async {
+    return _apiClient.get(StatsEndpoints.percentile);
   }
 }

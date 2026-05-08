@@ -22,8 +22,35 @@ class RiderStatsPeriod {
   }
 }
 
+/// Descriptif humain de la fenêtre de calcul, fourni par le backend.
+/// Les apps affichent `label` tel quel sous le filtre period et `tooltip`
+/// au tap pour le détail. Évite toute logique de formatage côté client.
+class RiderStatsPeriodWindow {
+  final String from;
+  final String to;
+  final String label;
+  final String tooltip;
+
+  const RiderStatsPeriodWindow({
+    required this.from,
+    required this.to,
+    required this.label,
+    required this.tooltip,
+  });
+
+  factory RiderStatsPeriodWindow.fromJson(Map<String, dynamic> json) {
+    return RiderStatsPeriodWindow(
+      from: (json['from'] ?? '').toString(),
+      to: (json['to'] ?? '').toString(),
+      label: (json['label'] ?? '').toString(),
+      tooltip: (json['tooltip'] ?? '').toString(),
+    );
+  }
+}
+
 class RiderStats {
   final RiderStatsPeriod period;
+  final RiderStatsPeriodWindow? periodWindow;
   final int totalDeliveries;
   final int deliveredCount;
   final int notDeliveredCount;
@@ -37,6 +64,7 @@ class RiderStats {
 
   const RiderStats({
     this.period = const RiderStatsPeriod(),
+    this.periodWindow,
     this.totalDeliveries = 0,
     this.deliveredCount = 0,
     this.notDeliveredCount = 0,
@@ -51,9 +79,18 @@ class RiderStats {
 
   factory RiderStats.fromJson(Map<String, dynamic> json) {
     return RiderStats(
-      period: json['period'] is Map<String, dynamic>
-          ? RiderStatsPeriod.fromJson(json['period'] as Map<String, dynamic>)
-          : const RiderStatsPeriod(),
+      period:
+          json['period'] is Map<String, dynamic>
+              ? RiderStatsPeriod.fromJson(
+                json['period'] as Map<String, dynamic>,
+              )
+              : const RiderStatsPeriod(),
+      periodWindow:
+          json['period_window'] is Map<String, dynamic>
+              ? RiderStatsPeriodWindow.fromJson(
+                json['period_window'] as Map<String, dynamic>,
+              )
+              : null,
       totalDeliveries: _asInt(json['total_deliveries']) ?? 0,
       deliveredCount: _asInt(json['delivered_count']) ?? 0,
       notDeliveredCount: _asInt(json['not_delivered_count']) ?? 0,
