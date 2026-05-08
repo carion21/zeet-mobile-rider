@@ -110,6 +110,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     ref.read(statusProvider.notifier).loadStatus();
   }
 
+  /// Pull-to-refresh : recharge en parallele tous les providers du home.
+  /// Aligne sur le contrat des autres ecrans (deliveries, stats, ratings).
+  Future<void> _onRefresh() async {
+    await Future.wait<void>(<Future<void>>[
+      ref.read(missionsListProvider.notifier).silentRefresh(),
+      ref.read(earningsSummaryProvider.notifier).silentRefresh(period: 'today'),
+      ref.read(unreadCountProvider.notifier).refresh(),
+      ref.read(riderStatsProvider.notifier).load(),
+      ref.read(statusProvider.notifier).loadStatus(),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     // Watch providers so that build() re-runs when they change
@@ -138,26 +150,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           children: [
             const HomeHeader(),
             Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const HomeNotifWarningBanner(),
-                    EarningsHeroCard(dailyEarnings: dailyEarnings),
-                    const SizedBox(height: 8),
-                    const ProgressChips(),
-                    if (canWrapUpDay) ...[
-                      const SizedBox(height: 12),
-                      Padding(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: AppSizes().paddingLarge),
-                        child: _buildWrapUpDayButton(dailyDeliveries),
-                      ),
+              child: RefreshIndicator(
+                color: AppColors.primary,
+                onRefresh: _onRefresh,
+                child: SingleChildScrollView(
+                  // AlwaysScrollable : autorise le pull meme quand le contenu
+                  // tient sans scroll (cas rider hors ligne ou stats vides).
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const HomeNotifWarningBanner(),
+                      EarningsHeroCard(dailyEarnings: dailyEarnings),
+                      const SizedBox(height: 8),
+                      const ProgressChips(),
+                      if (canWrapUpDay) ...[
+                        const SizedBox(height: 12),
+                        Padding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: AppSizes().paddingLarge),
+                          child: _buildWrapUpDayButton(dailyDeliveries),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                      const OngoingMissionsList(),
+                      const SizedBox(height: 20),
                     ],
-                    const SizedBox(height: 20),
-                    const OngoingMissionsList(),
-                    const SizedBox(height: 20),
-                  ],
+                  ),
                 ),
               ),
             ),

@@ -26,7 +26,14 @@ class ZeetFirebaseMessagingService : FlutterFirebaseMessagingService() {
         val type = data["type_value"] ?: data["type"] ?: ""
         Log.d(TAG, "onMessageReceived type=$type")
 
-        if (type.startsWith("delivery.offer") || type == "new_delivery") {
+        // Aligne sur MissionStatusDispatcher._incomingOfferTypes Dart : tout
+        // event "offre/assignation a accepter" doit demarrer le ForegroundService
+        // (sonnerie + FSI) en background/killed. Sans `rider.mission_assigned`,
+        // les missions assignees etaient ratees silencieusement.
+        if (type.startsWith("delivery.offer") ||
+            type == "new_delivery" ||
+            type == "rider.mission_assigned"
+        ) {
             if (!isAppInForeground()) {
                 startRingService(data, message)
             } else {

@@ -35,10 +35,30 @@ const int kMissionUpdateNotificationIdBase = 3000;
 // AudioAttributesUsage.alarm : autorise Android 8+ à franchir le DND si
 // l'utilisateur a coché "Autoriser les interruptions" pour ZEET dans les
 // settings Do-Not-Disturb (cf. zeet-notification-strategy §2-3).
-const String kIncomingDeliveryChannelId = 'zeet_rider_incoming_delivery';
+//
+// **Versionnage** : Android refuse de modifier le son d'un channel apres sa
+// creation. Bumper le suffixe a chaque changement de son / d'importance.
+// `_v2` : retrait de la `RawResourceAndroidNotificationSound('mission_alert')`
+// tant que le MP3 n'est pas livre dans `android/app/src/main/res/raw/` —
+// certains OEMs (Samsung, Xiaomi) creaient un channel silencieux quand la
+// raw resource etait introuvable au lieu de fallback systeme. En omettant
+// `sound:`, Android utilise le son de notif systeme par defaut → marche
+// partout. Aligne sur le pattern partner (`zeet_partner_incoming_order_v4`).
+const String kIncomingDeliveryChannelId = 'zeet_rider_incoming_delivery_v2';
 const String kIncomingDeliveryChannelName = 'Nouvelles missions';
 const String kIncomingDeliveryChannelDesc =
     'Alerte prioritaire sonore pour chaque nouvelle offre de livraison.';
+
+/// Flipper : `true` quand le MP3 custom est bien commit dans
+/// `android/app/src/main/res/raw/mission_alert.mp3`. Tant qu'il est `false`,
+/// on omet le parametre `sound` du channel et de la notif → fallback propre
+/// sur le son systeme par defaut. Quand le sound design livre l'asset :
+///   1. Copier `mission_alert.mp3` dans `android/app/src/main/res/raw/`.
+///   2. Basculer ce flag a `true` ET bumper [kIncomingDeliveryChannelId]
+///      (`_v2` → `_v3`) pour forcer Android a recreer le channel avec
+///      le nouveau son.
+const bool kHasCustomMissionSound = false;
+const String kMissionSoundResource = 'mission_alert';
 
 // 🔴 Critical / Operational — transitions standards d'une mission déjà
 // acceptée (assignée, annulée, forcée par le support, etc.). Importance
@@ -158,10 +178,13 @@ class LocalNotificationService {
         description: kIncomingDeliveryChannelDesc,
         importance: Importance.max,
         playSound: true,
-        // Son custom `mission_alert` : raw resource Android. Si le fichier
-        // n'est pas packagé dans res/raw/, Android retombe sur le son
-        // système par défaut sans crash.
-        sound: const RawResourceAndroidNotificationSound('mission_alert'),
+        // Son : raw resource custom si livree ([kHasCustomMissionSound]),
+        // sinon on omet le parametre pour laisser Android jouer le son de
+        // notif systeme par defaut. Une raw resource manquante creait un
+        // channel silencieux sur Samsung/Xiaomi au lieu du fallback annonce.
+        sound: kHasCustomMissionSound
+            ? const RawResourceAndroidNotificationSound(kMissionSoundResource)
+            : null,
         // AudioAttributesUsage.alarm : la catégorie "alarme" est celle qui
         // peut franchir le DND (si user opt-in). Cf. skill §2 et §4.
         audioAttributesUsage: AudioAttributesUsage.alarm,

@@ -48,7 +48,7 @@ class NotificationPreferencesService {
   // (alignes sur lib/services/local_notification_service.dart)
   static const NotificationChannelPref incomingDelivery =
       NotificationChannelPref(
-    channelId: 'zeet_rider_incoming_delivery',
+    channelId: 'zeet_rider_incoming_delivery_v2',
     label: 'Nouvelles missions',
     description: 'Sonnerie prioritaire pour chaque nouvelle offre.',
     toggleable: false, // critique business

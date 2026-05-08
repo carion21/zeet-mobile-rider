@@ -42,7 +42,13 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
     '[FcmService.bg] received: type=$type entity=${message.data['entity_id']}',
   );
 
-  if (type.startsWith('delivery.offer') || type == 'new_delivery') {
+  // Aligne sur MissionStatusDispatcher._incomingOfferTypes (foreground) :
+  // tout event "offre/assignation a accepter" doit declencher FSI + ring en
+  // background/killed. Sans `rider.mission_assigned`, l'app ratait silencieusement
+  // les missions assignees quand le tel etait verrouille.
+  if (type.startsWith('delivery.offer') ||
+      type == 'new_delivery' ||
+      type == 'rider.mission_assigned') {
     final data = Map<String, dynamic>.from(message.data);
     final notif = message.notification;
     if (notif != null) {

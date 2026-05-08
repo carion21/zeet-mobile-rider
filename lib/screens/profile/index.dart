@@ -72,6 +72,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (mounted) setState(() {});
   }
 
+  /// Pull-to-refresh : recharge profil + statut online. Skip si edition en
+  /// cours pour ne pas ecraser les champs en train d'etre saisis.
+  Future<void> _onRefresh() async {
+    if (_controller.isEditing) return;
+    await Future.wait<void>(<Future<void>>[
+      ref.read(authProvider.notifier).checkAuthStatus(force: true),
+      ref.read(statusProvider.notifier).loadStatus(),
+    ]);
+    if (mounted) _hydrateFromRider();
+  }
+
   // ---------------------------------------------------------------------------
   // Actions
   // ---------------------------------------------------------------------------
@@ -332,47 +343,51 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Padding(
-            padding: EdgeInsets.all(AppSizes().paddingLarge),
-            child: Form(
-              key: _controller.formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  _buildProfileHeader(
-                    rider,
-                    editState,
-                    textColor,
-                  ),
-                  SizedBox(height: AppSizes().paddingLarge),
-                  _buildStatusCard(
-                    statusState.isOnline,
-                    statusState.isLoading,
-                    textColor,
-                    textLightColor,
-                    surfaceColor,
-                  ),
-                  SizedBox(height: AppSizes().paddingXLarge),
-                  if (_controller.isEditing) ...[
-                    _buildProfileForm(
+        child: RefreshIndicator(
+          color: AppColors.primary,
+          onRefresh: _onRefresh,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Padding(
+              padding: EdgeInsets.all(AppSizes().paddingLarge),
+              child: Form(
+                key: _controller.formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _buildProfileHeader(
+                      rider,
                       editState,
+                      textColor,
+                    ),
+                    SizedBox(height: AppSizes().paddingLarge),
+                    _buildStatusCard(
+                      statusState.isOnline,
+                      statusState.isLoading,
                       textColor,
                       textLightColor,
                       surfaceColor,
-                      borderColor,
                     ),
-                    SizedBox(height: AppSizes().paddingLarge),
-                    _buildSaveButton(editState),
-                    SizedBox(height: AppSizes().paddingLarge),
+                    SizedBox(height: AppSizes().paddingXLarge),
+                    if (_controller.isEditing) ...[
+                      _buildProfileForm(
+                        editState,
+                        textColor,
+                        textLightColor,
+                        surfaceColor,
+                        borderColor,
+                      ),
+                      SizedBox(height: AppSizes().paddingLarge),
+                      _buildSaveButton(editState),
+                      SizedBox(height: AppSizes().paddingLarge),
+                    ],
+                    _buildNotifPermissionCard(surfaceColor),
+                    SizedBox(height: AppSizes().paddingMedium),
+                    _buildProfileOptions(textColor, textLightColor, surfaceColor),
+                    SizedBox(height: AppSizes().paddingXLarge),
+                    _buildLogoutButton(),
                   ],
-                  _buildNotifPermissionCard(surfaceColor),
-                  SizedBox(height: AppSizes().paddingMedium),
-                  _buildProfileOptions(textColor, textLightColor, surfaceColor),
-                  SizedBox(height: AppSizes().paddingXLarge),
-                  _buildLogoutButton(),
-                ],
+                ),
               ),
             ),
           ),
@@ -858,7 +873,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       child: Column(
         children: [
           _buildProfileOption(
-            title: 'Mes livraisons',
+            title: "Aujourd'hui",
             icon: 'delivery',
             onTap: () => ref.read(mainTabIndexProvider.notifier).goDeliveries(),
             showDivider: true,
