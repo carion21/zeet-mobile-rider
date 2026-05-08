@@ -65,6 +65,12 @@ const String kMissionSoundResource = 'mission_alert';
 // high : bruit + vibration modérés, pas de FullScreenIntent (on ne
 // réveille pas le téléphone comme pour une offre).
 const String kMissionUpdatesChannelId = 'zeet_rider_missions';
+
+/// Identifiants de categories APNS iOS — DOIVENT matcher exactement ceux
+/// que le backend place dans `apns.payload.aps.category`. Source de verite :
+/// `notification-channels.constants.ts::APNS_CATEGORY_RIDER_MISSION`.
+const String kIosMissionCategoryId = 'ZEET_RIDER_MISSION';
+const String kIosMissionUpdateCategoryId = 'ZEET_RIDER_MISSION_UPDATE';
 const String kMissionUpdatesChannelName = 'Mises à jour mission';
 const String kMissionUpdatesChannelDesc =
     'Changements d\'état de tes courses en cours : assignation, arrivée, annulation.';
@@ -100,7 +106,15 @@ void _onNotificationResponse(NotificationResponse response) {
   try {
     final decoded = jsonDecode(payloadStr);
     if (decoded is Map) {
-      _onTap?.call(Map<String, dynamic>.from(decoded));
+      final Map<String, dynamic> enriched = Map<String, dynamic>.from(decoded);
+      // Forward l'actionId quand l'utilisateur tape "Accepter" / "Refuser"
+      // sur une notif. Le dispatcher en aval lit `__action_id` pour
+      // declencher accept/reject automatiquement apres mount du provider.
+      final String? actionId = response.actionId;
+      if (actionId != null && actionId.isNotEmpty) {
+        enriched['__action_id'] = actionId;
+      }
+      _onTap?.call(enriched);
     }
   } catch (e) {
     debugPrint('[LocalNotifService] payload parse failed: $e');
@@ -127,14 +141,43 @@ class LocalNotificationService {
     _initialized = true;
 
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    // iOS Darwin init : permissions gérées en amont par FcmService pour
+    // iOS Darwin init : permissions gerees en amont par FcmService pour
     // respecter le pre-prompt (zeet-notification-strategy §8).
-    const iosInit = DarwinInitializationSettings(
+    // Categorie APNS `ZEET_RIDER_MISSION` avec actions inline Accepter/Refuser
+    // alignees sur le pattern partner (`ZEET_PARTNER_ORDER`). L'ID DOIT
+    // matcher exactement le `categoryIdentifier` envoye par le backend dans
+    // `apns.payload.aps.category` ET celui passe a `showIncomingDelivery`.
+    final DarwinInitializationSettings iosInit = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
       requestSoundPermission: false,
+      notificationCategories: <DarwinNotificationCategory>[
+        DarwinNotificationCategory(
+          kIosMissionCategoryId,
+          actions: <DarwinNotificationAction>[
+            DarwinNotificationAction.plain(
+              'accept',
+              'Accepter',
+              options: <DarwinNotificationActionOption>{
+                DarwinNotificationActionOption.foreground,
+              },
+            ),
+            DarwinNotificationAction.plain(
+              'refuse',
+              'Refuser',
+              options: <DarwinNotificationActionOption>{
+                DarwinNotificationActionOption.destructive,
+                DarwinNotificationActionOption.foreground,
+              },
+            ),
+          ],
+          options: <DarwinNotificationCategoryOption>{
+            DarwinNotificationCategoryOption.hiddenPreviewShowTitle,
+          },
+        ),
+      ],
     );
-    const initSettings = InitializationSettings(
+    final InitializationSettings initSettings = InitializationSettings(
       android: androidInit,
       iOS: iosInit,
     );
@@ -302,6 +345,22 @@ class LocalNotificationService {
       color: const Color(0xFFFF5A1F),
       colorized: true,
       ticker: title,
+      // Actions inline Accepter/Refuser depuis la notif (sans avoir a ouvrir
+      // l'app manuellement). showsUserInterface: true → ouvre l'app et le
+      // tap arrive a `_onNotificationResponse` avec `response.actionId` =
+      // 'accept' | 'refuse'. Pattern aligne sur partner (zeet-mobile-merchant).
+      actions: const <AndroidNotificationAction>[
+        AndroidNotificationAction(
+          'accept',
+          'Accepter',
+          showsUserInterface: true,
+        ),
+        AndroidNotificationAction(
+          'refuse',
+          'Refuser',
+          showsUserInterface: true,
+        ),
+      ],
     );
     // iOS : `timeSensitive` permet de percer le Focus Mode si l'utilisateur
     // l'autorise. Critical alerts nécessitent l'entitlement Apple (rare et
@@ -312,7 +371,7 @@ class LocalNotificationService {
       presentBadge: true,
       presentSound: true,
       interruptionLevel: InterruptionLevel.timeSensitive,
-      categoryIdentifier: 'zeet.rider.mission',
+      categoryIdentifier: kIosMissionCategoryId,
     );
 
     final details = NotificationDetails(
@@ -375,7 +434,7 @@ class LocalNotificationService {
       presentBadge: true,
       presentSound: true,
       interruptionLevel: InterruptionLevel.timeSensitive,
-      categoryIdentifier: 'zeet.rider.mission_update',
+      categoryIdentifier: kIosMissionUpdateCategoryId,
     );
 
     final details = NotificationDetails(
@@ -393,14 +452,25 @@ class LocalNotificationService {
   }
 
   /// Recupere le payload d'une notification qui a lance l'app (cold-start).
+  /// Enrichit avec `__action_id` si l'utilisateur a lance l'app via une
+  /// action inline ("Accepter" / "Refuser") plutot qu'un tap sur la notif.
   static Future<Map<String, dynamic>?> getLaunchPayload() async {
     try {
       final details = await _plugin.getNotificationAppLaunchDetails();
       if (details?.didNotificationLaunchApp != true) return null;
-      final payloadStr = details?.notificationResponse?.payload;
+      final response = details?.notificationResponse;
+      final payloadStr = response?.payload;
       if (payloadStr == null || payloadStr.isEmpty) return null;
       final decoded = jsonDecode(payloadStr);
-      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      if (decoded is Map) {
+        final Map<String, dynamic> enriched =
+            Map<String, dynamic>.from(decoded);
+        final String? actionId = response?.actionId;
+        if (actionId != null && actionId.isNotEmpty) {
+          enriched['__action_id'] = actionId;
+        }
+        return enriched;
+      }
     } catch (e) {
       debugPrint('[LocalNotifService] getLaunchPayload failed: $e');
     }

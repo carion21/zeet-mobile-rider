@@ -12,6 +12,7 @@ import 'package:zeet_ui/zeet_ui.dart';
 import 'package:rider/core/constants/themes.dart';
 import 'package:rider/core/widgets/active_missions_fab_overlay.dart';
 import 'package:rider/providers/connectivity_provider.dart';
+import 'package:rider/providers/incoming_delivery_provider.dart';
 import 'package:rider/providers/mission_provider.dart';
 import 'package:rider/providers/offline_queue_provider.dart';
 import 'package:rider/providers/theme_provider.dart';
@@ -110,6 +111,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
           // (l'ecran pousse par IncomingDeliveryDispatcher / les screens
           // gerent eux-memes la navigation cible).
           MissionStatusDispatcher.handleRaw(ref, data);
+          // Action inline notif : "Accepter" / "Refuser" depuis le shade.
+          // handleRaw a deja push le payload dans incomingDeliveryProvider
+          // via show() — on peut donc declencher accept/reject directement.
+          await _autoApplyNotificationAction(ref, data);
         },
       );
 
@@ -161,10 +166,36 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       if (cold != null) {
         debugPrint('[main] cold-start offer dispatched after ${i * 500}ms');
         IncomingDeliveryDispatcher.handleRaw(readyRef, cold);
+        // Cold-start via tap action notif : applique accept/reject aussi
+        await _autoApplyNotificationAction(readyRef, cold);
         return;
       }
     }
     debugPrint('[main] no cold-start offer within 10s window');
+  }
+
+  /// Si l'utilisateur a tape "Accepter" / "Refuser" sur la notif (au lieu
+  /// d'ouvrir l'app), `__action_id` est present dans le payload (injecte
+  /// par LocalNotificationService). On declenche alors l'action sur le
+  /// provider — le dispatcher upstream a deja pousse l'ecran offer +
+  /// rempli incomingDeliveryProvider.payload.
+  Future<void> _autoApplyNotificationAction(
+    WidgetRef ref,
+    Map<String, dynamic> data,
+  ) async {
+    final String? actionId = data['__action_id'] as String?;
+    if (actionId == null) return;
+    // Petit delay pour laisser le widget tree se mount avant d'appeler
+    // accept/reject — le provider est deja set par show() en amont.
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    final notifier = ref.read(incomingDeliveryProvider.notifier);
+    if (actionId == 'accept') {
+      debugPrint('[main] auto-accept from notification action');
+      await notifier.accept();
+    } else if (actionId == 'refuse') {
+      debugPrint('[main] auto-reject from notification action');
+      await notifier.reject(reason: 'Refusee depuis la notification');
+    }
   }
 
   @override
